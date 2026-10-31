@@ -146,6 +146,45 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	}}
 }
 
+// tinyText catches a dense laptop screen left at 100%, where text and
+// buttons come out too small to read comfortably. The width comes from
+// the EDID (byte 21, in cm) and the panel's preferred mode.
+func tinyText(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Session != "wayland" || !strings.Contains(strings.ToLower(h.Desktop), "gnome") || !s.Has("gdbus") {
+		return nil
+	}
+	out, err := s.Run(ctx, "gdbus", "call", "--session", "--dest", "org.gnome.Mutter.DisplayConfig",
+		"--object-path", "/org/gnome/Mutter/DisplayConfig", "--method", "org.gnome.Mutter.DisplayConfig.GetCurrentState")
+	scales := logicalScale.FindAllStringSubmatch(string(out), -1)
+	if err != nil || len(scales) != 1 || scales[0][1] != "1.0" && scales[0][1] != "1" {
+		return nil
+	}
+	panels, _ := s.Glob("/sys/class/drm/card*-eDP-*/edid")
+	for _, p := range panels {
+		edid, _ := s.ReadFile(p)
+		dir := strings.TrimSuffix(p, "/edid")
+		var w, hgt int
+		if len(edid) < 128 || edid[21] == 0 || readTrim(s, dir+"/status") != "connected" {
+			continue
+		}
+		if _, err := fmt.Sscanf(firstLineOf(readTrim(s, dir+"/modes")), "%dx%d", &w, &hgt); err != nil {
+			continue
+		}
+		dpi := float64(w) / (float64(edid[21]) / 2.54)
+		if dpi < 190 {
+			continue
+		}
+		return []doctor.Finding{{
+			Status: doctor.Info,
+			Title:  fmt.Sprintf("Text looks tiny: the built-in screen is %dx%d on %d cm, shown at 100%%", w, hgt, edid[21]),
+			Explain: fmt.Sprintf("This screen packs about %.0f dots per inch, about twice a usual monitor, so at 100%% everything is drawn at half the size. "+
+				"Scaling makes it sharp and readable instead of small.", dpi),
+			Fixes: []doctor.Fix{{Title: "Set Scale to 200% (or 150% or 175%) in Settings, under Displays"}},
+		}}
+	}
+	return nil
+}
+
 // nightLight answers "why does my screen look yellow": the desktop's Night
 // Light is tinting it right now.
 func nightLight(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
@@ -348,6 +387,9 @@ func runDisplay(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	fs = append(fs, blurryXwayland(ctx, s, h)...)
 	fs = append(fs, lowRefresh(ctx, s, h)...)
 	fs = append(fs, nightLight(ctx, s, h)...)
+	if h.Laptop {
+		fs = append(fs, tinyText(ctx, s, h)...)
+	}
 
 	if len(active) > 0 {
 		fs = append(fs, doctor.Finding{

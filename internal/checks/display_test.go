@@ -52,6 +52,33 @@ func TestLowRefreshKDE(t *testing.T) {
 	}
 }
 
+func TestTinyText(t *testing.T) {
+	const state = "gdbus call --session --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig --method org.gnome.Mutter.DisplayConfig.GetCurrentState"
+	at := func(scale string) string {
+		return "(uint32 7, [], [(0, 0, " + scale + ", uint32 0, true, [('eDP-1', 'ACME', 'Panel', '0x00000000')], @a{sv} {})], {})"
+	}
+	edid := make([]byte, 128)
+	edid[21], edid[22] = 30, 19
+	const d = "/sys/class/drm/card1-eDP-1/"
+	fake := func(scale, modes string) *sys.Fake {
+		return &sys.Fake{
+			Files:    files(d+"edid", string(edid), d+"status", "connected\n", d+"modes", modes),
+			Commands: map[string]string{state: at(scale)},
+		}
+	}
+	h := &doctor.Host{Session: "wayland", Desktop: "GNOME", Laptop: true}
+	fs := tinyText(context.Background(), fake("1.0", "3840x2400\n1920x1200\n"), h)
+	if len(fs) != 1 || fs[0].Title != "Text looks tiny: the built-in screen is 3840x2400 on 30 cm, shown at 100%" {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if fs := tinyText(context.Background(), fake("2.0", "3840x2400\n"), h); len(fs) != 0 {
+		t.Errorf("scaled: %+v", fs)
+	}
+	if fs := tinyText(context.Background(), fake("1.0", "1920x1200\n"), h); len(fs) != 0 {
+		t.Errorf("normal density: %+v", fs)
+	}
+}
+
 func TestNightLight(t *testing.T) {
 	const q = "busctl --user get-property org.gnome.SettingsDaemon.Color /org/gnome/SettingsDaemon/Color org.gnome.SettingsDaemon.Color NightLightActive"
 	gnome := &doctor.Host{Desktop: "ubuntu:GNOME"}
