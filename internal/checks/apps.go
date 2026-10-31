@@ -33,6 +33,66 @@ func runApps(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	fs = append(fs, portals(ctx, s, h)...)
 	fs = append(fs, snaps(ctx, s)...)
 	fs = append(fs, fileWatches(s)...)
+	fs = append(fs, brokenExtensions(ctx, s, h)...)
+	return fs
+}
+
+// brokenExtensions lists GNOME Shell extensions the running shell refused
+// to load, the usual aftermath of a GNOME upgrade: a missing dock or tray
+// icons, or a panel that looks different.
+func brokenExtensions(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Desktop != "GNOME" || !s.Has("gnome-extensions") {
+		return nil
+	}
+	out, err := s.Run(ctx, "gnome-extensions", "list", "--enabled", "--details")
+	if err != nil {
+		return nil
+	}
+	var errored, outdated []string
+	var uuid, name, firstErr string
+	for _, l := range strings.Split(string(out), "\n") {
+		t := strings.TrimSpace(l)
+		switch {
+		case t == "":
+		case !strings.HasPrefix(l, " ") && !strings.HasPrefix(l, "\t"):
+			uuid, name = t, t
+		case strings.HasPrefix(t, "Name:"):
+			name = strings.TrimSpace(strings.TrimPrefix(t, "Name:"))
+		case t == "State: ERROR":
+			if firstErr == "" {
+				firstErr = uuid
+			}
+			errored = append(errored, name+" ("+uuid+")")
+		case t == "State: OUT OF DATE":
+			outdated = append(outdated, name+" ("+uuid+")")
+		}
+	}
+	var fs []doctor.Finding
+	fixes := []doctor.Fix{
+		{Title: "Update them in the Extension Manager app, or on extensions.gnome.org", URL: "https://extensions.gnome.org/local/"},
+	}
+	if len(errored) > 0 {
+		f := doctor.Finding{
+			Status: doctor.Warn,
+			Title:  "GNOME couldn't load " + plural(len(errored), "extension", "extensions"),
+			Explain: "These extensions crashed while starting, so whatever they add (a dock, tray icons, a panel tweak) is missing. " +
+				"A broken extension can also make the desktop slow or unstable until it's switched off.",
+			Fixes:    fixes,
+			Evidence: errored,
+		}
+		f.Fixes = append(f.Fixes, doctor.Fix{Title: "Switch off " + strings.SplitN(errored[0], " (", 2)[0], Command: "gnome-extensions disable " + firstErr})
+		fs = append(fs, f)
+	}
+	if len(outdated) > 0 {
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Info,
+			Title:  plural(len(outdated), "extension doesn't", "extensions don't") + " support this GNOME version yet",
+			Explain: "GNOME updated and these extensions haven't caught up, so they're switched on but not running. " +
+				"An update usually arrives within weeks of a GNOME release.",
+			Fixes:    fixes,
+			Evidence: outdated,
+		})
+	}
 	return fs
 }
 
