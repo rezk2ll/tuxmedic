@@ -93,6 +93,16 @@ func runBattery(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	for _, b := range bats {
 		fs = append(fs, batteryFindings(b, pluggedIn, watts, len(chargers) > 0)...)
 	}
+	if !pluggedIn && len(chargers) > 0 && s.Has("powerprofilesctl") {
+		if out, _ := s.Run(ctx, "powerprofilesctl", "get"); strings.TrimSpace(string(out)) == "performance" {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   "The performance power mode is on while running on battery",
+				Explain: "Performance mode keeps the processor at high speed, which empties the battery much faster. The desktop doesn't switch back by itself when you unplug.",
+				Fixes:   []doctor.Fix{{Title: "Switch to balanced", Command: "powerprofilesctl set balanced"}},
+			})
+		}
+	}
 	return append(fs, powerManagers(ctx, s, h)...)
 }
 
