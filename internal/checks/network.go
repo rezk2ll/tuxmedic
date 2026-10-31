@@ -3,6 +3,8 @@ package checks
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -168,6 +170,59 @@ func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Findi
 	return f
 }
 
+// proxyDown catches a proxy that is set but doesn't answer, typically a
+// work laptop used at home: the network itself works, but every app that
+// follows the proxy setting fails to load anything.
+func proxyDown(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	where, addr := "", ""
+	for _, v := range []string{"https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY"} {
+		if p := s.Getenv(v); p != "" {
+			where, addr = "the "+v+" setting", p
+			break
+		}
+	}
+	if addr == "" && strings.Contains(strings.ToLower(h.Desktop), "gnome") && s.Has("gsettings") {
+		if m, _ := s.Run(ctx, "gsettings", "get", "org.gnome.system.proxy", "mode"); strings.TrimSpace(string(m)) == "'manual'" {
+			host, _ := s.Run(ctx, "gsettings", "get", "org.gnome.system.proxy.https", "host")
+			port, _ := s.Run(ctx, "gsettings", "get", "org.gnome.system.proxy.https", "port")
+			if hs := strings.Trim(strings.TrimSpace(string(host)), "'"); hs != "" {
+				where, addr = "GNOME's network proxy settings", hs+":"+strings.TrimSpace(string(port))
+			}
+		}
+	}
+	if addr == "" {
+		return nil
+	}
+	if !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+	u, err := url.Parse(addr)
+	if err != nil || u.Hostname() == "" {
+		return nil
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"https": "443", "socks5": "1080", "socks5h": "1080", "socks": "1080"}[u.Scheme]
+		if port == "" {
+			port = "80"
+		}
+	}
+	target := net.JoinHostPort(u.Hostname(), port)
+	if s.Dial(ctx, target) == nil {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Fail,
+		Title:  "A proxy is set, but it doesn't answer",
+		Explain: "Apps are told by " + where + " to go through this proxy, and it can't be reached, so browsers and updates fail even though the network works. " +
+			"This happens when a work proxy is still set at home, or after leaving a network that needed one.",
+		Fixes: []doctor.Fix{
+			{Title: "If you don't need a proxy here, turn it off in your network settings, and remove the proxy lines from ~/.profile, ~/.bashrc or /etc/environment"},
+		},
+		Evidence: []string{"proxy from " + where + " unreachable (its address is left out so reports don't carry it)"},
+	}}
+}
+
 // unmanagedNIC catches a real network adapter NetworkManager was told to
 // leave alone, usually because /etc/network/interfaces or netplan still
 // lists it from an install done over a cable. The desktop then can't
@@ -297,6 +352,7 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		fs = append(fs, f)
 	}
 	fs = append(fs, unmanagedNIC(ctx, s, h)...)
+	fs = append(fs, proxyDown(ctx, s, h)...)
 	// Containers and VMs see a virtual network, never the laptop's Wi-Fi card.
 	if h.Laptop && !hasWifi && !h.Container && h.Virtual == "" {
 		f := doctor.Finding{

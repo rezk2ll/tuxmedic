@@ -22,7 +22,7 @@ tuxmedic asks them for you. It runs 29 checks, usually in under a second, and te
 Each check answers a question people actually ask:
 
 - Crashes & freezes: why did my computer crash, freeze or restart by itself? It reads the previous sessions' logs and names the cause: out of memory, graphics card hang, kernel panic, overheating. When the crashes began right after a kernel, graphics or desktop update, it says which one and how to go back.
-- Internet & Wi-Fi: why can't I get online? It tells apart airplane mode, an adapter the network settings were told to ignore, a router with no internet, broken DNS and hotel sign-in pages, and notices a connection that keeps dropping, an IPv6 setup that makes every site stall, Wi-Fi stuck on the slow 2.4 GHz band next to a strong 5 GHz signal, Wi-Fi with no country set (which hides some 5 GHz networks), or a network cable that only links at 100 Mb/s.
+- Internet & Wi-Fi: why can't I get online? It tells apart airplane mode, an adapter the network settings were told to ignore, a router with no internet, broken DNS, hotel sign-in pages and a proxy that is set but doesn't answer, and notices a connection that keeps dropping, an IPv6 setup that makes every site stall, Wi-Fi stuck on the slow 2.4 GHz band next to a strong 5 GHz signal, Wi-Fi with no country set (which hides some 5 GHz networks), or a network cable that only links at 100 Mb/s.
 - Sound: why is there no sound? Muted output, the wrong default device, a monitor with no HDMI profile, a Bluetooth headset stuck in call quality, missing firmware, PipeWire left with only "Dummy Output" because WirePlumber isn't running.
 - Camera & microphone: why don't they work in video calls? Another app holding the camera, the GNOME privacy switches, a muted or silent microphone, apps recording the speakers instead of the mic, Intel IPU laptop cameras that need extra drivers.
 - Screen sharing & app sandbox: why is my shared screen black on Wayland? A missing or crashed desktop portal, no PipeWire, Flatpak apps with no Open and Save dialog, stuck snap updates and old snap versions eating disk space, snap apps that can't see USB drives, editors and sync apps out of file watches ("Unable to watch for file changes"), GNOME extensions that crashed or don't support the new GNOME yet, AppImages that won't open without libfuse2.
@@ -87,7 +87,7 @@ The packages and the install script add `man tuxmedic` and tab completion for ba
 
 ## Privacy
 
-tuxmedic only reads. It changes nothing unless you pick a fix and press Enter, and then it runs the command it showed you in your terminal. It sends nothing anywhere. The only network traffic is a connection test to 1.1.1.1 and 9.9.9.9 (and their IPv6 addresses, when your network has IPv6) and a DNS lookup of debian.org and kernel.org.
+tuxmedic only reads. It changes nothing unless you pick a fix and press Enter, and then it runs the command it showed you in your terminal. It sends nothing anywhere. The only network traffic is a connection test to 1.1.1.1 and 9.9.9.9 (and their IPv6 addresses, when your network has IPv6) and a DNS lookup of debian.org and kernel.org. When a proxy is set, it also opens a connection to the proxy to see if it answers, and sends nothing through it.
 
 To tell you what changed since last time, tuxmedic keeps one small file, `~/.local/state/tuxmedic/last.json`, with the name and result of each check and nothing else. Delete it whenever you like.
 

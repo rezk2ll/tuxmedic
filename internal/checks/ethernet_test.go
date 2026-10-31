@@ -2,11 +2,41 @@ package checks
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
+
+func TestProxyDown(t *testing.T) {
+	ctx := context.Background()
+	env := &sys.Fake{Env: map[string]string{"https_proxy": "http://proxy.corp.example:3128/"}}
+	fs := proxyDown(ctx, env, &doctor.Host{})
+	if len(fs) != 1 || fs[0].Title != "A proxy is set, but it doesn't answer" || strings.Contains(strings.Join(fs[0].Evidence, " "), "corp") {
+		t.Fatalf("env proxy = %+v", fs)
+	}
+	env.Reachable = map[string]bool{"proxy.corp.example:3128": true}
+	if fs := proxyDown(ctx, env, &doctor.Host{}); len(fs) != 0 {
+		t.Errorf("reachable proxy: %+v", fs)
+	}
+
+	gnome := &sys.Fake{Commands: map[string]string{
+		"gsettings get org.gnome.system.proxy mode":       "'manual'\n",
+		"gsettings get org.gnome.system.proxy.https host": "'10.0.0.8'\n",
+		"gsettings get org.gnome.system.proxy.https port": "8080\n",
+	}}
+	if fs := proxyDown(ctx, gnome, &doctor.Host{Desktop: "GNOME"}); len(fs) != 1 || !strings.Contains(fs[0].Explain, "GNOME's network proxy settings") {
+		t.Errorf("gnome proxy = %+v", fs)
+	}
+	gnome.Reachable = map[string]bool{"10.0.0.8:8080": true}
+	if fs := proxyDown(ctx, gnome, &doctor.Host{Desktop: "GNOME"}); len(fs) != 0 {
+		t.Errorf("reachable gnome proxy: %+v", fs)
+	}
+	if fs := proxyDown(ctx, &sys.Fake{}, &doctor.Host{}); len(fs) != 0 {
+		t.Errorf("no proxy: %+v", fs)
+	}
+}
 
 func TestUnmanagedNIC(t *testing.T) {
 	h := &doctor.Host{Desktop: "GNOME", Network: "NetworkManager"}
