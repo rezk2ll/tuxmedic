@@ -61,6 +61,10 @@ func TestNightLight(t *testing.T) {
 	if fs := nightLight(context.Background(), &sys.Fake{Commands: map[string]string{q: "b false\n"}}, gnome); len(fs) != 0 {
 		t.Errorf("inactive = %+v", fs)
 	}
+	const kq = "busctl --user get-property org.kde.KWin.NightLight /org/kde/KWin/NightLight org.kde.KWin.NightLight running"
+	if fs := nightLight(context.Background(), &sys.Fake{Commands: map[string]string{kq: "b true\n"}}, &doctor.Host{Desktop: "KDE"}); len(fs) != 1 {
+		t.Errorf("kde running = %+v", fs)
+	}
 }
 
 func edid(name string) string {

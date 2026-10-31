@@ -153,7 +153,24 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 // nightLight answers "why does my screen look yellow": GNOME's Night Light
 // is tinting it right now.
 func nightLight(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
-	if !strings.Contains(strings.ToLower(h.Desktop), "gnome") || !s.Has("busctl") {
+	d := strings.ToLower(h.Desktop)
+	if !s.Has("busctl") {
+		return nil
+	}
+	if strings.Contains(d, "kde") {
+		out, err := s.Run(ctx, "busctl", "--user", "get-property", "org.kde.KWin.NightLight", "/org/kde/KWin/NightLight",
+			"org.kde.KWin.NightLight", "running")
+		if err != nil || strings.TrimSpace(string(out)) != "b true" {
+			return nil
+		}
+		return []doctor.Finding{{
+			Status:  doctor.Info,
+			Title:   "Night Light is on, which makes the screen look yellow or orange",
+			Explain: "Night Light warms the colors to be easier on the eyes. Depending on its settings it runs all the time or comes back each evening.",
+			Fixes:   []doctor.Fix{{Title: "Pause it from the Night Light icon in the panel, or turn it off in System Settings, under Display & Monitor, Night Light"}},
+		}}
+	}
+	if !strings.Contains(d, "gnome") {
 		return nil
 	}
 	out, err := s.Run(ctx, "busctl", "--user", "get-property", "org.gnome.SettingsDaemon.Color", "/org/gnome/SettingsDaemon/Color",
