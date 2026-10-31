@@ -105,6 +105,9 @@ func runBluetooth(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 			}}
 		}
 	}
+	if f := btFirmware(ctx, s, h); f != nil {
+		return []doctor.Finding{*f}
+	}
 	if h.Systemd && s.Has("systemctl") {
 		if out, _ := s.Run(ctx, "systemctl", "is-active", "bluetooth"); strings.TrimSpace(string(out)) != "active" {
 			return []doctor.Finding{{
@@ -126,6 +129,47 @@ func runBluetooth(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 		}
 	}
 	return []doctor.Finding{{Status: doctor.OK, Title: "Bluetooth is on and ready"}}
+}
+
+// btFirmware looks in this boot's kernel log for a Bluetooth chip whose
+// firmware didn't load, or that stopped answering. The adapter still shows
+// up in both cases, but nothing pairs.
+func btFirmware(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
+	es, err := journal(ctx, s, "-b", "-k", "-p", "0..4")
+	if err != nil {
+		return nil
+	}
+	for _, e := range es {
+		m := e.Message
+		lower := strings.ToLower(m)
+		bt := strings.Contains(m, "Bluetooth: hci")
+		fwFile := strings.HasPrefix(m, "Direct firmware load for") &&
+			(strings.Contains(m, "rtl_bt/") || strings.Contains(m, "intel/ibt-") || strings.Contains(m, "mediatek/BT") || strings.Contains(m, "qca/"))
+		switch {
+		case fwFile || bt && strings.Contains(lower, "firmware") && (strings.Contains(lower, "fail") || strings.Contains(lower, "not found")):
+			return &doctor.Finding{
+				Status: doctor.Fail,
+				Title:  "The Bluetooth chip's firmware didn't load",
+				Explain: "The chip needs a firmware file from the linux-firmware package to work. It's missing or too old for this chip, " +
+					"so Bluetooth shows up but can't find or connect to anything.",
+				Fixes:    []doctor.Fix{installFix(h, "linux-firmware"), {Title: "If it's installed already, install the latest updates and restart; new chips need new firmware"}},
+				Evidence: []string{m},
+			}
+		case bt && (strings.Contains(m, "tx timeout") || strings.Contains(m, "command failed") || strings.Contains(m, "Reading Intel version command failed")):
+			return &doctor.Finding{
+				Status: doctor.Warn,
+				Title:  "The Bluetooth chip stopped answering",
+				Explain: "The chip hung and didn't respond to the computer. A full power-off resets it, which a restart sometimes doesn't. " +
+					"If it keeps happening after updates, it's a known driver bug for some chips.",
+				Fixes: []doctor.Fix{
+					{Title: "Shut down completely, wait 10 seconds, and turn the computer back on"},
+					{Title: "Reload the driver without restarting", Command: "sudo modprobe -r btusb && sudo modprobe btusb", NeedsRoot: true},
+				},
+				Evidence: []string{m},
+			}
+		}
+	}
+	return nil
 }
 
 var Sleep = doctor.Check{

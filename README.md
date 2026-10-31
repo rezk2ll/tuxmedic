@@ -38,7 +38,7 @@ Each check answers a question people actually ask:
 - Video playback: why do videos stutter and the fans spin up? No VA-API driver for your Intel, AMD or NVIDIA graphics, so the processor decodes every frame.
 - Games & Steam: why won't my games start? No Vulkan driver for Proton, the 32-bit driver Steam needs, Flatpak Steam without the controller rules.
 - Recent changes: it worked last week, what changed? Reads the update history (apt, pacman, rpm) and names the kernel, graphics, firmware, sound or desktop update most likely behind a new problem, with the way back.
-- Also: sleep and wake (including a lid that is set to do nothing), memory and swap, temperatures and fans, pending updates and stuck package managers, slow startup and failed services, the clock, languages that were never installed ("Setting locale failed"), emoji drawn as boxes, links, folders and PDFs whose default app was uninstalled, keyring password prompts caused by automatic login, Bluetooth, groups that only work after you log out, and files in your home folder left owned by root.
+- Also: sleep and wake (including a lid that is set to do nothing), memory and swap, temperatures and fans, pending updates and stuck package managers, slow startup and failed services, the clock, languages that were never installed ("Setting locale failed"), emoji drawn as boxes, links, folders and PDFs whose default app was uninstalled, keyring password prompts caused by automatic login, Bluetooth (including chips whose firmware didn't load), groups that only work after you log out, and files in your home folder left owned by root.
 
 ![A check with its fixes and the log lines behind it](docs/detail.png)
 
