@@ -17,8 +17,17 @@ func TestNotifications(t *testing.T) {
 	dnd := &sys.Fake{Commands: map[string]string{bus: owned, "gsettings get org.gnome.desktop.notifications show-banners": "false\n"}}
 	expect(t, run(t, Notifications, dnd, gnome), doctor.Info, "Do Not Disturb is on")
 
+	dump := "[org-gnome-calendar]\napplication-id='org.gnome.Calendar.desktop'\n\n" +
+		"[slack]\napplication-id='slack.desktop'\nenable=false\n\n[firefox]\nenable=false\napplication-id='firefox_firefox.desktop'\n"
+	muted := &sys.Fake{
+		Commands: map[string]string{bus: owned, "dconf dump /org/gnome/desktop/notifications/application/": dump},
+		Files:    files("/usr/share/applications/slack.desktop", "[Desktop Entry]\nName=Slack\nName[de]=Slack\nExec=slack\n"),
+	}
+	r := run(t, Notifications, muted, gnome)
+	expect(t, r, doctor.Info, "Notifications are switched off for Slack and firefox_firefox")
+
 	sway := &doctor.Host{Desktop: "sway", Session: "wayland", PackageMgr: "pacman"}
-	r := run(t, Notifications, &sys.Fake{Commands: map[string]string{bus: "org.freedesktop.DBus 1 systemd user - - - -\n"}}, sway)
+	r = run(t, Notifications, &sys.Fake{Commands: map[string]string{bus: "org.freedesktop.DBus 1 systemd user - - - -\n"}}, sway)
 	expect(t, r, doctor.Warn, "Nothing on your desktop shows notifications")
 	if c := r.Findings[0].Fixes[0].Command; c != "sudo pacman -S mako" {
 		t.Errorf("fix = %q", c)

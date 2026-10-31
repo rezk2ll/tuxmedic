@@ -35,9 +35,10 @@ func runNotifications(ctx context.Context, s sys.System, h *doctor.Host) []docto
 			}}
 		}
 	}
-	if strings.Contains(strings.ToLower(h.Desktop), "gnome") && s.Has("gsettings") {
-		if out, _ := s.Run(ctx, "gsettings", "get", "org.gnome.desktop.notifications", "show-banners"); strings.TrimSpace(string(out)) == "false" {
-			return []doctor.Finding{{
+	var fs []doctor.Finding
+	if strings.Contains(strings.ToLower(h.Desktop), "gnome") {
+		if out, _ := s.Run(ctx, "gsettings", "get", "org.gnome.desktop.notifications", "show-banners"); s.Has("gsettings") && strings.TrimSpace(string(out)) == "false" {
+			fs = append(fs, doctor.Finding{
 				Status:  doctor.Info,
 				Title:   "Do Not Disturb is on",
 				Explain: "Notifications still arrive, but they only go to the list under the clock instead of popping up. It stays on until you switch it off.",
@@ -45,10 +46,73 @@ func runNotifications(ctx context.Context, s sys.System, h *doctor.Host) []docto
 					{Title: "Switch it off from the list under the clock, or in Settings, under Notifications"},
 					{Title: "Or switch it off from here", Command: "gsettings set org.gnome.desktop.notifications show-banners true"},
 				},
-			}}
+			})
+		}
+		fs = append(fs, mutedApps(ctx, s)...)
+	}
+	if len(fs) == 0 {
+		return []doctor.Finding{{Status: doctor.OK, Title: "Notifications can be shown"}}
+	}
+	return fs
+}
+
+// mutedApps lists the apps whose notifications are switched off in GNOME's
+// settings, from one dconf dump of the per-app sections:
+//
+//	[slack]
+//	application-id='slack.desktop'
+//	enable=false
+func mutedApps(ctx context.Context, s sys.System) []doctor.Finding {
+	if !s.Has("dconf") {
+		return nil
+	}
+	out, err := s.Run(ctx, "dconf", "dump", "/org/gnome/desktop/notifications/application/")
+	if err != nil {
+		return nil
+	}
+	var muted, ids []string
+	id, off := "", false
+	flush := func() {
+		if off && id != "" {
+			muted = append(muted, desktopAppName(s, id))
+			ids = append(ids, id)
+		}
+		id, off = "", false
+	}
+	for _, l := range strings.Split(string(out), "\n") {
+		l = strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(l, "["):
+			flush()
+		case strings.HasPrefix(l, "application-id="):
+			id = strings.Trim(strings.TrimPrefix(l, "application-id="), "'")
+		case l == "enable=false":
+			off = true
 		}
 	}
-	return []doctor.Finding{{Status: doctor.OK, Title: "Notifications can be shown"}}
+	flush()
+	if len(muted) == 0 {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:   doctor.Info,
+		Title:    "Notifications are switched off for " + joinAnd(muted),
+		Explain:  "These apps can't show notifications at all, not even in the list under the clock. Someone switched them off in the settings, or clicked away a notification with that option.",
+		Fixes:    []doctor.Fix{{Title: "Switch them back on in Settings, under Notifications, by app"}},
+		Evidence: ids,
+	}}
+}
+
+// desktopAppName reads the name an app shows in menus from its .desktop file.
+func desktopAppName(s sys.System, id string) string {
+	for _, dir := range []string{"/usr/share/applications/", "/var/lib/flatpak/exports/share/applications/", "/var/lib/snapd/desktop/applications/"} {
+		for _, l := range strings.Split(readTrim(s, dir+id), "\n") {
+			if n, ok := strings.CutPrefix(l, "Name="); ok {
+				return n
+			}
+		}
+	}
+	return strings.TrimSuffix(id, ".desktop")
 }
 
 func hasBusName(list, name string) bool {
