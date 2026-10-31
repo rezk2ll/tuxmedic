@@ -71,6 +71,10 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		})
 	}
 
+	if h.PackageMgr == "apt" {
+		fs = append(fs, deadAptSources(s)...)
+	}
+
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "No pending restart and the package manager is healthy"})
 	}
