@@ -15,7 +15,7 @@ Find out what's wrong with your Linux computer, and how to fix it.
 
 The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
 
-tuxmedic asks them for you. It runs 18 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+tuxmedic asks them for you. It runs 19 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
 
 ## What it checks
 
@@ -27,6 +27,7 @@ Each check answers a question people actually ask:
 - Camera & microphone: why don't they work in video calls? Another app holding the camera, the GNOME privacy switches, a muted or silent microphone, apps recording the speakers instead of the mic, Intel IPU laptop cameras that need extra drivers.
 - Screen sharing & app sandbox: why is my shared screen black on Wayland? A missing or crashed desktop portal, no PipeWire, Flatpak apps with no Open and Save dialog, stuck snap updates and old snap versions eating disk space.
 - Screens & monitors: why does my second monitor stay black? A monitor switched off in settings, a cable that doesn't pass the monitor's details, a DisplayLink dock without its driver, a Thunderbolt dock waiting for approval.
+- Printers: why can't I print? A stopped printing service, a printer CUPS paused after an error, jobs stuck in the queue, a network printer that is ready but not added yet.
 - Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain.
 - Disks & storage: is my disk full or failing? Free space and the cleanups that work on your distro, a disk switched to read-only, drive health (SMART) without root.
 - Drivers & graphics: is some hardware missing a driver? NVIDIA with Secure Boot, Broadcom Wi-Fi, missing firmware.

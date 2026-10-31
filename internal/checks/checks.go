@@ -9,7 +9,7 @@ import (
 
 func All() []doctor.Check {
 	cs := []doctor.Check{
-		Crash, Network, Sound, Camera, Display, Battery, Disk, Memory, Thermal,
+		Crash, Network, Sound, Camera, Display, Printer, Battery, Disk, Memory, Thermal,
 		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Permissions, Clock,
 	}
 	for i := range cs {
@@ -31,6 +31,7 @@ var keywords = map[string]string{
 		"voice hear",
 	"display": "monitor monitors screen screens display displays external second hdmi displayport usbc dock " +
 		"thunderbolt projector tv resolution black blank detected flicker flickering",
+	"printer": "printer printers print printing printed scanner cups paper job jobs queue hp epson canon brother",
 	"battery": "battery charge charging charger plugged power drain draining percent 80 health wear capacity",
 	"disk":    "disk disks storage space full ssd drive hdd nvme smart readonly partition cleanup clean free",
 	"memory":  "memory ram swap slow sluggish lag laggy tabs heavy freezing",
