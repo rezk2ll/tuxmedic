@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,27 @@ func TestStaleArch(t *testing.T) {
 	t.Run("no log", func(t *testing.T) {
 		expect(t, run(t, Updates, fake(""), &doctor.Host{ID: "arch", PackageMgr: "pacman"}), doctor.OK, "healthy")
 	})
+}
+
+func TestMeteredUpdates(t *testing.T) {
+	const q = "busctl get-property org.freedesktop.NetworkManager /org/freedesktop/NetworkManager org.freedesktop.NetworkManager Metered"
+	h := &doctor.Host{Desktop: "GNOME", Network: "NetworkManager"}
+	at := func(v string) []doctor.Finding {
+		return meteredUpdates(context.Background(), &sys.Fake{Commands: map[string]string{q: v + "\n"}}, h)
+	}
+	if fs := at("u 1"); len(fs) != 1 || !strings.Contains(fs[0].Explain, "set as metered") {
+		t.Errorf("metered = %+v", fs)
+	}
+	if fs := at("u 3"); len(fs) != 1 || !strings.Contains(fs[0].Explain, "phone hotspot") {
+		t.Errorf("guessed = %+v", fs)
+	}
+	if fs := at("u 4"); len(fs) != 0 {
+		t.Errorf("not metered: %+v", fs)
+	}
+	h.Desktop = "sway"
+	if fs := at("u 1"); len(fs) != 0 {
+		t.Errorf("no software center: %+v", fs)
+	}
 }
 
 func TestEndOfLife(t *testing.T) {

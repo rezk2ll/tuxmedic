@@ -22,6 +22,7 @@ var Updates = doctor.Check{
 
 func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	fs := endOfLife(s)
+	fs = append(fs, meteredUpdates(ctx, s, h)...)
 
 	modules := "/usr/lib/modules"
 	if !s.Exists(modules) {
@@ -161,6 +162,34 @@ func endOfLife(s sys.System) []doctor.Finding {
 		return []doctor.Finding{f}
 	}
 	return nil
+}
+
+// meteredUpdates catches a connection marked as metered, on which GNOME
+// Software and KDE Discover don't download updates by themselves.
+// NetworkManager's Metered is an NMMetered: 1 yes, 3 guessed yes.
+func meteredUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	d := strings.ToLower(h.Desktop)
+	if h.Network != "NetworkManager" || !s.Has("busctl") || !strings.Contains(d, "gnome") && !strings.Contains(d, "kde") {
+		return nil
+	}
+	out, err := s.Run(ctx, "busctl", "get-property", "org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager",
+		"org.freedesktop.NetworkManager", "Metered")
+	if err != nil {
+		return nil
+	}
+	f := doctor.Finding{Status: doctor.Info, Title: "Updates don't download by themselves: your connection counts as metered"}
+	switch strings.TrimSpace(string(out)) {
+	case "u 1":
+		f.Explain = "This connection is set as metered (paid by the megabyte), so the software center waits for you to start updates. " +
+			"That's right for a phone plan, and a mistake for home Wi-Fi."
+		f.Fixes = []doctor.Fix{{Title: "If it isn't, open this connection in your network settings and turn off \"Metered connection\""}}
+	case "u 3":
+		f.Explain = "The connection looks like a phone hotspot or mobile data, so it's treated as metered and the software center waits for you to start updates."
+		f.Fixes = []doctor.Fix{{Title: "If it isn't paid by the megabyte, open it in your network settings and set it as not metered"}}
+	default:
+		return nil
+	}
+	return []doctor.Finding{f}
 }
 
 func eolExplain(end time.Time) string {
