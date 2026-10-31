@@ -45,10 +45,45 @@ func runPermissions(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	fs = append(fs, pendingGroups(s, h)...)
 	fs = append(fs, rootOwnedHome(ctx, s, h)...)
 	fs = append(fs, ownHostname(ctx, s)...)
+	fs = append(fs, lockedOut(ctx, s, h)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Your group memberships are active and your home folder belongs to you"})
 	}
 	return fs
+}
+
+// lockedOut catches pam_faillock locking the account after a few wrong
+// passwords: sudo and the lock screen then reject the right password too,
+// with no message saying why.
+func lockedOut(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if !h.Systemd || h.User == "" {
+		return nil
+	}
+	es, err := journal(ctx, s, "--since", "-15min", "-p", "0..5", "-g", "account temporarily locked")
+	if err != nil {
+		return nil
+	}
+	var last *entry
+	for i, e := range es {
+		if strings.Contains(e.Message, "for user "+h.User+" account temporarily locked") {
+			last = &es[i]
+		}
+	}
+	if last == nil {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Warn,
+		Title:  "Your account is locked for a few minutes after wrong passwords",
+		Explain: "After several wrong passwords in a row, Linux refuses even the right one for a while, usually 10 minutes, and doesn't say so. " +
+			"sudo and the lock screen just answer \"wrong password\". Typing it again restarts the wait.",
+		Fixes: []doctor.Fix{
+			{Title: "Wait 10 minutes without trying, then type it once, slowly"},
+			{Title: "Or restart: the lock is cleared at boot"},
+			{Title: "See the failed attempts", Command: "faillock --user " + h.User},
+		},
+		Evidence: []string{last.Time.Format("15:04:05") + " " + last.Message},
+	}}
 }
 
 // ownHostname catches a computer that can't look up its own name, usually
