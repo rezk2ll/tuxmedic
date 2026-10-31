@@ -43,6 +43,18 @@ func TestBluetooth(t *testing.T) {
 			t.Errorf("AutoEnable=true still offers the startup fix: %+v", fx)
 		}
 	})
+	t.Run("pipewire without its bluetooth plugin", func(t *testing.T) {
+		f := fake("")
+		f.Files["/usr/lib/x86_64-linux-gnu/spa-0.2/alsa/libspa-alsa.so"] = ""
+		deb := &doctor.Host{ID: "debian", PackageMgr: "apt"}
+		r := run(t, Bluetooth, f, deb)
+		expect(t, r, doctor.Warn, "connect but play no sound")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo apt install libspa-0.2-bluetooth" {
+			t.Errorf("fix = %q", c)
+		}
+		f.Files["/usr/lib/x86_64-linux-gnu/spa-0.2/bluez5/libspa-bluez5.so"] = ""
+		expect(t, run(t, Bluetooth, f, deb), doctor.OK, "Bluetooth is on and ready")
+	})
 	t.Run("ready", func(t *testing.T) {
 		expect(t, run(t, Bluetooth, fake(kernelLog("usb 3-1: new device")), h), doctor.OK, "Bluetooth is on and ready")
 	})

@@ -155,7 +155,45 @@ func runBluetooth(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 			return []doctor.Finding{f}
 		}
 	}
+	if f := btNoAudioPlugin(s, h); f != nil {
+		return []doctor.Finding{*f}
+	}
 	return []doctor.Finding{{Status: doctor.OK, Title: "Bluetooth is on and ready"}}
+}
+
+// btNoAudioPlugin catches PipeWire installed without its Bluetooth plugin,
+// which Debian and Ubuntu ship separately: headphones pair and connect,
+// then never appear as a sound output.
+func btNoAudioPlugin(s sys.System, h *doctor.Host) *doctor.Finding {
+	var spa []string
+	for _, p := range []string{"/usr/lib/*/spa-0.2", "/usr/lib64/spa-0.2", "/usr/lib/spa-0.2"} {
+		hits, _ := s.Glob(p + "/alsa")
+		spa = append(spa, hits...)
+	}
+	if len(spa) == 0 {
+		return nil
+	}
+	for _, d := range spa {
+		if s.Exists(strings.TrimSuffix(d, "alsa") + "bluez5") {
+			return nil
+		}
+	}
+	f := &doctor.Finding{
+		Status:   doctor.Warn,
+		Title:    "Bluetooth headphones and speakers will connect but play no sound",
+		Explain:  "PipeWire, which plays your sound, is installed without its Bluetooth part. Devices pair fine, but never show up as a sound output.",
+		Evidence: []string{"no spa-0.2/bluez5 next to " + spa[0]},
+	}
+	switch h.PackageMgr {
+	case "apt":
+		f.Fixes = []doctor.Fix{installFix(h, "libspa-0.2-bluetooth")}
+	case "pacman":
+		f.Fixes = []doctor.Fix{installFix(h, "pipewire-audio")}
+	default:
+		f.Fixes = []doctor.Fix{{Title: "Install your distro's PipeWire Bluetooth package (its name has pipewire or spa and bluetooth or bluez in it)"}}
+	}
+	f.Fixes = append(f.Fixes, doctor.Fix{Title: "Then restart the sound service", Command: "systemctl --user restart pipewire wireplumber"})
+	return f
 }
 
 // btFirmware looks in this boot's kernel log for a Bluetooth chip whose
