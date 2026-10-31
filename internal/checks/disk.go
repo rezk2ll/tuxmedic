@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -116,6 +117,38 @@ func runDisk(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	fs = append(fs, ioErrors(ctx, s)...)
 	fs = append(fs, smartHealth(ctx, s, h)...)
 	fs = append(fs, noTrim(ctx, s, h)...)
+	fs = append(fs, hugeSessionLog(ctx, s, h)...)
+	return fs
+}
+
+// hugeSessionLog catches the X session log, which nothing rotates: an app
+// that warns in a loop can grow it until the disk is full.
+func hugeSessionLog(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Home == "" || !s.Has("stat") {
+		return nil
+	}
+	var fs []doctor.Finding
+	for _, name := range []string{".xsession-errors", ".xsession-errors.old"} {
+		p := h.Home + "/" + name
+		if !s.Exists(p) {
+			continue
+		}
+		out, err := s.Run(ctx, "stat", "-c", "%s", p)
+		size, perr := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
+		if err != nil || perr != nil || size < 1<<30 {
+			continue
+		}
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Warn,
+			Title:  fmt.Sprintf("~/%s has grown to %s", name, humanBytes(size)),
+			Explain: "Apps in your desktop session write their warnings to this file, and nothing ever trims it. One app warning in a loop makes it grow " +
+				"until the disk is full. Emptying it is safe; the warnings at its end show which app is filling it.",
+			Fixes: []doctor.Fix{
+				{Title: "See which app fills it", Command: "tail -n 20 ~/" + name},
+				{Title: "Empty it", Command: ": > ~/" + name},
+			},
+		})
+	}
 	return fs
 }
 

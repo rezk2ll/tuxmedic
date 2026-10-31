@@ -1,11 +1,27 @@
 package checks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
+
+func TestHugeSessionLog(t *testing.T) {
+	h := &doctor.Host{Home: "/home/sam"}
+	fake := &sys.Fake{
+		Files: files("/home/sam/.xsession-errors", "", "/home/sam/.xsession-errors.old", ""),
+		Commands: map[string]string{
+			"stat -c %s /home/sam/.xsession-errors":     "5368709120\n",
+			"stat -c %s /home/sam/.xsession-errors.old": "40960\n",
+		},
+	}
+	fs := hugeSessionLog(context.Background(), fake, h)
+	if len(fs) != 1 || fs[0].Title != "~/.xsession-errors has grown to 5.0 GB" || fs[0].Fixes[1].Command != ": > ~/.xsession-errors" {
+		t.Fatalf("findings = %+v", fs)
+	}
+}
 
 func TestNoTrim(t *testing.T) {
 	h := &doctor.Host{ID: "arch", PackageMgr: "pacman", Systemd: true}
