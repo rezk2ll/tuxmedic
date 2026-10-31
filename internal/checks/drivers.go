@@ -173,7 +173,10 @@ func nvidia(ctx context.Context, s sys.System, h *doctor.Host, gpus []pciDev) []
 				Status:  doctor.Warn,
 				Title:   "NVIDIA kernel mode setting is off, which Wayland needs",
 				Explain: "Without it you may get a black screen, a fallback to X11, or no external monitors.",
-				Fixes:   []doctor.Fix{{Title: "Add nvidia-drm.modeset=1 to your kernel command line", URL: "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"}},
+				Fixes: []doctor.Fix{
+					kernelArgFix(s, h, "nvidia-drm.modeset=1"),
+					{Title: "Read more about NVIDIA mode setting", URL: "https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting"},
+				},
 			})
 		}
 		return fs
