@@ -6,6 +6,6 @@ import "github.com/rezk2ll/tuxmedic/internal/doctor"
 func All() []doctor.Check {
 	return []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Battery, Disk, Memory, Thermal,
-		Drivers, Sleep, Bluetooth, Updates, Boot, Permissions, Clock,
+		Drivers, Sleep, Bluetooth, Updates, Boot, Apps, Permissions, Clock,
 	}
 }
