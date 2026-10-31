@@ -68,6 +68,23 @@ func runClock(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		})
 	}
 
+	// GNOME finds the automatic time zone through location services.
+	if strings.Contains(strings.ToLower(h.Desktop), "gnome") && s.Has("gsettings") {
+		auto, _ := s.Run(ctx, "gsettings", "get", "org.gnome.desktop.datetime", "automatic-timezone")
+		loc, _ := s.Run(ctx, "gsettings", "get", "org.gnome.system.location", "enabled")
+		if strings.TrimSpace(string(auto)) == "true" && strings.TrimSpace(string(loc)) == "false" {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   "The automatic time zone can't change: location services are off",
+				Explain: "GNOME picks the time zone from where you are, which needs location services. With them off, the clock keeps the old time zone when you travel.",
+				Fixes: []doctor.Fix{
+					{Title: "Turn on location services in Settings, under Privacy, Location"},
+					{Title: "Or turn them on from here", Command: "gsettings set org.gnome.system.location enabled true"},
+				},
+			})
+		}
+	}
+
 	if windows && kv["LocalRTC"] == "no" {
 		fs = append(fs, doctor.Finding{
 			Status: doctor.Info,

@@ -29,4 +29,9 @@ func TestClock(t *testing.T) {
 		t.Errorf("fix = %q", c)
 	}
 	expect(t, run(t, Clock, fake(utc), &doctor.Host{}), doctor.OK, "set automatically (Etc/UTC)")
+
+	noLoc := fake(synced)
+	noLoc.Commands["gsettings get org.gnome.desktop.datetime automatic-timezone"] = "true\n"
+	noLoc.Commands["gsettings get org.gnome.system.location enabled"] = "false\n"
+	expect(t, run(t, Clock, noLoc, desk), doctor.Info, "location services are off")
 }
