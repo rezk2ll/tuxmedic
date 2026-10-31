@@ -3,6 +3,8 @@ package checks
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -30,6 +32,63 @@ func gpuDriver(s sys.System) string {
 		}
 	}
 	return drv
+}
+
+var vdfPath = regexp.MustCompile(`^\s*"path"\s+"(.+)"`)
+
+// windowsFSLibraries catches Steam libraries on drives formatted for
+// Windows. Proton needs symlinks, Unix permissions and file names with ":",
+// which exFAT and FAT lack and NTFS only half provides on Linux.
+func windowsFSLibraries(s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Home == "" {
+		return nil
+	}
+	var libs []string
+	for _, root := range []string{"/.local/share/Steam", "/.steam/steam", "/.var/app/com.valvesoftware.Steam/.local/share/Steam"} {
+		for _, l := range strings.Split(readTrim(s, h.Home+root+"/steamapps/libraryfolders.vdf"), "\n") {
+			if m := vdfPath.FindStringSubmatch(l); m != nil && !slices.Contains(libs, m[1]) {
+				libs = append(libs, m[1])
+			}
+		}
+	}
+	names := map[string]string{"ntfs": "NTFS", "ntfs3": "NTFS", "fuseblk": "NTFS", "exfat": "exFAT", "vfat": "FAT32"}
+	var fs []doctor.Finding
+	for _, lib := range libs {
+		fsName := names[fsTypeOf(s, lib)]
+		if fsName == "" {
+			continue
+		}
+		f := doctor.Finding{
+			Status: doctor.Warn,
+			Title:  "Windows games in the Steam library on " + lib + " may not start: the drive is " + fsName,
+			Explain: "Proton needs features of Linux drives (links, file permissions, \":\" in file names) to run Windows games. " +
+				"Drives formatted for Windows lack them, so games there crash at start or never open. Native Linux games are usually fine.",
+			Fixes: []doctor.Fix{{Title: "Move the games to a library on a Linux-formatted drive: Steam, Settings, Storage, then Move"}},
+		}
+		if fsName == "NTFS" {
+			f.Fixes = append(f.Fixes, doctor.Fix{Title: "To share the drive with Windows anyway, follow Valve's guide", URL: "https://github.com/ValveSoftware/Proton/wiki/Using-a-NTFS-disk-with-Linux-and-Windows"})
+		}
+		fs = append(fs, f)
+	}
+	return fs
+}
+
+// fsTypeOf names the filesystem holding path, from the longest mount point
+// that contains it.
+func fsTypeOf(s sys.System, path string) string {
+	b, _ := s.ReadFile("/proc/self/mounts")
+	best, typ := "", ""
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 {
+			continue
+		}
+		t := unescapeMount(f[1])
+		if (path == t || strings.HasPrefix(path, strings.TrimSuffix(t, "/")+"/")) && len(t) > len(best) {
+			best, typ = t, f[2]
+		}
+	}
+	return typ
 }
 
 func runGames(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
@@ -117,6 +176,7 @@ func runGames(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 			}
 		}
 	}
+	fs = append(fs, windowsFSLibraries(s, h)...)
 
 	if len(fs) == 0 {
 		how := "Steam"

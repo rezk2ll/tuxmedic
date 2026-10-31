@@ -84,6 +84,19 @@ func TestGames(t *testing.T) {
 		expect(t, run(t, Games, &sys.Fake{Files: with(rules, "/proc/self/limits", limits("524288")), Commands: flatSteam}, apt),
 			doctor.OK, "Steam (Flatpak) has the drivers it needs")
 	})
+	t.Run("library on a Windows drive", func(t *testing.T) {
+		vdf := "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"/home/sam/.local/share/Steam\"\n\t}\n" +
+			"\t\"1\"\n\t{\n\t\t\"path\"\t\t\"/run/media/sam/Games Disk/SteamLibrary\"\n\t}\n}\n"
+		mnt := "/dev/nvme0n1p2 / ext4 rw 0 0\n/dev/nvme0n1p3 /home ext4 rw 0 0\n" +
+			"/dev/sda1 /run/media/sam/Games\\040Disk fuseblk rw,user_id=0 0 0\n"
+		rules := with(amd, "/usr/lib/udev/rules.d/60-steam-input.rules", "")
+		files := with(with(rules, "/home/sam/.local/share/Steam/steamapps/libraryfolders.vdf", vdf), "/proc/self/mounts", mnt)
+		r := run(t, Games, &sys.Fake{Files: files, Commands: flatSteam}, &doctor.Host{PackageMgr: "apt", Home: "/home/sam"})
+		expect(t, r, doctor.Warn, "Steam library on /run/media/sam/Games Disk/SteamLibrary may not start: the drive is NTFS")
+		if len(r.Findings) != 1 || len(r.Findings[0].Fixes) != 2 {
+			t.Errorf("findings = %+v", r.Findings)
+		}
+	})
 	t.Run("nvidia beats the integrated gpu", func(t *testing.T) {
 		f := &sys.Fake{Files: map[string]string{
 			"/sys/class/drm/card0/device/uevent": "DRIVER=i915\n",
