@@ -15,7 +15,7 @@ Find out what's wrong with your Linux computer, and how to fix it.
 
 The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
 
-tuxmedic asks them for you. It runs 24 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+tuxmedic asks them for you. It runs 25 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
 
 ## What it checks
 
@@ -37,7 +37,7 @@ Each check answers a question people actually ask:
 - Drivers & graphics: is some hardware missing a driver? NVIDIA with Secure Boot, Broadcom Wi-Fi, missing firmware.
 - Games & Steam: why won't my games start? No Vulkan driver for Proton, the 32-bit driver Steam needs, Flatpak Steam without the controller rules.
 - Recent changes: it worked last week, what changed? Reads the update history (apt, pacman, rpm) and names the kernel, graphics, firmware, sound or desktop update most likely behind a new problem, with the way back.
-- Also: sleep and wake, memory and swap, temperatures and fans, pending updates and stuck package managers, slow startup and failed services, the clock, Bluetooth, groups that only work after you log out, and files in your home folder left owned by root.
+- Also: sleep and wake, memory and swap, temperatures and fans, pending updates and stuck package managers, slow startup and failed services, the clock, languages that were never installed ("Setting locale failed"), Bluetooth, groups that only work after you log out, and files in your home folder left owned by root.
 
 ![A check with its fixes and the log lines behind it](docs/detail.png)
 

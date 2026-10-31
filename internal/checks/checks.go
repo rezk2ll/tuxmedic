@@ -10,7 +10,7 @@ import (
 func All() []doctor.Check {
 	cs := []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Games,
-		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Permissions, Clock,
+		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Permissions, Locale, Clock,
 	}
 	for i := range cs {
 		cs[i].Keywords = strings.Fields(keywords[cs[i].ID])
@@ -57,5 +57,7 @@ var keywords = map[string]string{
 		"screenshot",
 	"permissions": "permission permissions denied group groups docker sudo root arduino serial dialout owner " +
 		"ownership loop login",
+	"locale": "locale language languages lang utf8 utf-8 unicode accents accented characters letters question marks " +
+		"garbled perl warning setting failed",
 	"clock": "clock time date timezone dual dualboot windows ntp sync wrong hour",
 }
