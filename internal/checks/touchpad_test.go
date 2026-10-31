@@ -1,0 +1,55 @@
+package checks
+
+import (
+	"testing"
+
+	"github.com/rezk2ll/tuxmedic/internal/doctor"
+	"github.com/rezk2ll/tuxmedic/internal/sys"
+)
+
+const inputs = `I: Bus=0018 Vendor=04f3 Product=3195 Version=0100
+N: Name="ELAN0678:00 04F3:3195 Mouse"
+H: Handlers=mouse0 event4
+
+I: Bus=0018 Vendor=04f3 Product=3195 Version=0100
+N: Name="ELAN0678:00 04F3:3195 Touchpad"
+H: Handlers=mouse1 event5
+`
+
+func TestTouchpad(t *testing.T) {
+	laptop := &doctor.Host{ID: "fedora", Laptop: true, Desktop: "GNOME"}
+	usbMouse := inputs + "\nN: Name=\"Logi USB Optical Mouse\"\n"
+
+	t.Run("found", func(t *testing.T) {
+		f := &sys.Fake{Files: map[string]string{"/proc/bus/input/devices": inputs}}
+		expect(t, run(t, Touchpad, f, laptop), doctor.OK, "Touchpad found: ELAN0678:00 04F3:3195 Touchpad")
+	})
+	t.Run("missing", func(t *testing.T) {
+		f := &sys.Fake{Files: map[string]string{"/proc/bus/input/devices": "N: Name=\"AT Translated Set 2 keyboard\"\n"}}
+		expect(t, run(t, Touchpad, f, laptop), doctor.Warn, "Linux doesn't see your touchpad")
+	})
+	t.Run("turned off in GNOME", func(t *testing.T) {
+		f := &sys.Fake{
+			Files:    map[string]string{"/proc/bus/input/devices": inputs},
+			Commands: map[string]string{"gsettings get org.gnome.desktop.peripherals.touchpad send-events": "'disabled'\n"},
+		}
+		expect(t, run(t, Touchpad, f, laptop), doctor.Fail, "The touchpad is turned off in your settings")
+	})
+	t.Run("off with a mouse, and a mouse is plugged in", func(t *testing.T) {
+		f := &sys.Fake{
+			Files:    map[string]string{"/proc/bus/input/devices": usbMouse},
+			Commands: map[string]string{"gsettings get org.gnome.desktop.peripherals.touchpad send-events": "'disabled-on-external-mouse'\n"},
+		}
+		expect(t, run(t, Touchpad, f, laptop), doctor.Info, "off while a mouse is plugged in")
+	})
+	t.Run("off with a mouse, but only the touchpad's own mouse node", func(t *testing.T) {
+		f := &sys.Fake{
+			Files:    map[string]string{"/proc/bus/input/devices": inputs},
+			Commands: map[string]string{"gsettings get org.gnome.desktop.peripherals.touchpad send-events": "'disabled-on-external-mouse'\n"},
+		}
+		expect(t, run(t, Touchpad, f, laptop), doctor.OK, "Touchpad found")
+	})
+	t.Run("desktop", func(t *testing.T) {
+		expect(t, run(t, Touchpad, &sys.Fake{}, &doctor.Host{}), doctor.Skipped, "Only laptops")
+	})
+}
