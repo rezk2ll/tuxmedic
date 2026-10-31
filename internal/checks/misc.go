@@ -48,6 +48,24 @@ func runClock(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "The clock is set automatically (" + firstNonEmpty(kv["Timezone"], "UTC") + ")"})
 	}
 
+	// Installers that skip the time zone step leave UTC, so a desktop's
+	// clock shows the wrong hour for nearly everyone.
+	switch tz := kv["Timezone"]; {
+	case h.Desktop == "" || h.Container || h.Virtual != "":
+	case tz == "" || tz == "n/a" || tz == "UTC" || tz == "Etc/UTC" || tz == "Universal" || tz == "Zulu" || tz == "Etc/Universal":
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Info,
+			Title:  "The time zone is set to UTC, so the clock may be hours off for you",
+			Explain: "The time is right, but shown for UTC instead of where you are. Installers set this when the time zone step is skipped. " +
+				"If you do live in UTC, ignore this.",
+			Fixes: []doctor.Fix{
+				{Title: "Pick your time zone in the desktop's Date & Time settings"},
+				{Title: "Or find your city in this list, then run sudo timedatectl set-timezone with it (e.g. Europe/Paris)", Command: "timedatectl list-timezones"},
+			},
+			Evidence: []string{"Timezone=" + firstNonEmpty(tz, "(none)")},
+		})
+	}
+
 	if windows && kv["LocalRTC"] == "no" {
 		fs = append(fs, doctor.Finding{
 			Status: doctor.Info,
