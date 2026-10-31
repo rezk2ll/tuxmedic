@@ -1,12 +1,29 @@
 package checks
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
+
+func TestSleepBlockers(t *testing.T) {
+	const q = "busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager ListInhibitors"
+	out := `a(ssssuu) 4 "handle-power-key:handle-suspend-key:handle-lid-switch" "sam" "GNOME handling keypresses" "block" 1000 2101 ` +
+		`"sleep" "sam" "GNOME needs to lock the screen" "delay" 1000 2101 ` +
+		`"idle:sleep" "Transmission" "Downloading \"debian.iso\"" "block" 1000 4242 ` +
+		`"sleep" "Transmission" "Seeding" "block" 1000 4242` + "\n"
+	fs := sleepBlockers(context.Background(), &sys.Fake{Commands: map[string]string{q: out}})
+	if len(fs) != 1 || fs[0].Title != "The computer won't go to sleep while Transmission asks it not to" ||
+		fs[0].Evidence[0] != `Transmission: Downloading \"debian.iso\"` {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if fs := sleepBlockers(context.Background(), &sys.Fake{Commands: map[string]string{q: "a(ssssuu) 0\n"}}); len(fs) != 0 {
+		t.Errorf("none: %+v", fs)
+	}
+}
 
 func TestSleep(t *testing.T) {
 	laptop := &doctor.Host{ID: "fedora", Laptop: true, Desktop: "GNOME"}

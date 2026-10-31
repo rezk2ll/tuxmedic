@@ -3,6 +3,8 @@ package checks
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -262,12 +264,55 @@ var Sleep = doctor.Check{
 	Run:      runSleep,
 }
 
+var busToken = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"|(\S+)`)
+
+// sleepBlockers lists apps holding a "block" inhibitor on sleep, from
+// logind's ListInhibitors: a(ssssuu) N "what" "who" "why" "mode" uid pid ...
+// Desktop shells and power managers block only the lid and power keys, to
+// handle them themselves, so they don't show up here.
+func sleepBlockers(ctx context.Context, s sys.System) []doctor.Finding {
+	if !s.Has("busctl") {
+		return nil
+	}
+	out, err := s.Run(ctx, "busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1",
+		"org.freedesktop.login1.Manager", "ListInhibitors")
+	if err != nil {
+		return nil
+	}
+	var tok []string
+	for _, m := range busToken.FindAllStringSubmatch(string(out), -1) {
+		tok = append(tok, m[1]+m[2])
+	}
+	if len(tok) < 2 {
+		return nil
+	}
+	var who, ev []string
+	for r := tok[2:]; len(r) >= 6; r = r[6:] {
+		what, app, why, mode := r[0], r[1], r[2], r[3]
+		if mode != "block" || !slices.Contains(strings.Split(what, ":"), "sleep") || slices.Contains(who, app) {
+			continue
+		}
+		who = append(who, app)
+		ev = append(ev, app+": "+why)
+	}
+	if len(who) == 0 {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:   doctor.Info,
+		Title:    "The computer won't go to sleep while " + joinAnd(who) + " asks it not to",
+		Explain:  "Apps can hold off sleep while they work, for example during a download, a backup or a video. Sleep works again once they finish or close.",
+		Fixes:    []doctor.Fix{{Title: "Let the app finish, or close it"}, {Title: "See every app holding off sleep", Command: "systemd-inhibit --list"}},
+		Evidence: ev,
+	}}
+}
+
 func runSleep(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	modes := readTrim(s, "/sys/power/mem_sleep")
 	if modes == "" {
 		return []doctor.Finding{{Status: doctor.Skipped, Title: "This system doesn't support sleep"}}
 	}
-	var fs []doctor.Finding
+	fs := sleepBlockers(ctx, s)
 	fail := readTrim(s, "/sys/power/suspend_stats/fail")
 	if fail != "" && fail != "0" {
 		dev := readTrim(s, "/sys/power/suspend_stats/last_failed_dev")
