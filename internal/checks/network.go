@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -419,6 +420,10 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 			Fixes: dnsFixes(s),
 		})
 	case !online && !hasDefaultRoute(s):
+		if f := noLease(ctx, s, ifs); f != nil {
+			fs = append(fs, *f)
+			break
+		}
 		f := doctor.Finding{
 			Status:  doctor.Fail,
 			Title:   "You're not connected to any network",
@@ -446,6 +451,53 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 
 	fs = append(fs, wifiDrops(ctx, s)...)
 	return fs
+}
+
+// noLease catches a link that is up with no usable IPv4 address: the router
+// never answered DHCP, so the computer is plugged in or joined but has no
+// address (or only a 169.254 one it made up itself).
+func noLease(ctx context.Context, s sys.System, ifs []iface) *doctor.Finding {
+	if !s.Has("ip") {
+		return nil
+	}
+	for _, i := range ifs {
+		if !i.up || !i.carrier {
+			continue
+		}
+		out, err := s.Run(ctx, "ip", "-j", "-4", "addr", "show", "dev", i.name)
+		var info []struct {
+			Addrs []struct {
+				Local string `json:"local"`
+			} `json:"addr_info"`
+		}
+		if err != nil || json.Unmarshal(out, &info) != nil || len(info) == 0 {
+			continue
+		}
+		usable := false
+		for _, a := range info[0].Addrs {
+			usable = usable || !strings.HasPrefix(a.Local, "169.254.")
+		}
+		if usable {
+			continue
+		}
+		kind := "the network cable"
+		if i.wireless {
+			kind = "Wi-Fi"
+		}
+		return &doctor.Finding{
+			Status: doctor.Fail,
+			Title:  "Connected over " + kind + ", but the router didn't give this computer an address",
+			Explain: "The link works, but the router never answered the request for an address (DHCP), so nothing can be reached. " +
+				"The router is often busy or stuck, or the network only lets in known devices.",
+			Fixes: []doctor.Fix{
+				{Title: "Disconnect and reconnect, to ask again"},
+				{Title: "Restart the router"},
+				{Title: "On a work or school network, ask whether your device needs to be registered first"},
+			},
+			Evidence: []string{i.name + ": no IPv4 address from DHCP"},
+		}
+	}
+	return nil
 }
 
 func rfkillWifi(s sys.System) (doctor.Finding, bool) {

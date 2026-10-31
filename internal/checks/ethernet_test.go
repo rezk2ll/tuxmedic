@@ -9,6 +9,21 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
 
+func TestNoLease(t *testing.T) {
+	const d = "/sys/class/net/enp3s0/"
+	fake := func(addrs string) *sys.Fake {
+		return &sys.Fake{
+			Files:    files(d+"operstate", "up", d+"carrier", "1"),
+			Commands: map[string]string{"ip -j -4 addr show dev enp3s0": `[{"ifname":"enp3s0","addr_info":[` + addrs + `]}]`},
+		}
+	}
+	h := &doctor.Host{}
+	expect(t, run(t, Network, fake(`{"family":"inet","local":"169.254.7.9","prefixlen":16}`), h), doctor.Fail,
+		"Connected over the network cable, but the router didn't give this computer an address")
+	expect(t, run(t, Network, fake(""), h), doctor.Fail, "router didn't give this computer an address")
+	expect(t, run(t, Network, fake(`{"family":"inet","local":"192.168.1.20","prefixlen":24}`), h), doctor.Fail, "You're not connected to any network")
+}
+
 func TestProxyDown(t *testing.T) {
 	ctx := context.Background()
 	env := &sys.Fake{Env: map[string]string{"https_proxy": "http://proxy.corp.example:3128/"}}
