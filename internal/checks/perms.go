@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -46,10 +47,66 @@ func runPermissions(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	fs = append(fs, rootOwnedHome(ctx, s, h)...)
 	fs = append(fs, ownHostname(ctx, s)...)
 	fs = append(fs, lockedOut(ctx, s, h)...)
+	fs = append(fs, serialAccess(ctx, s, h)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Your group memberships are active and your home folder belongs to you"})
 	}
 	return fs
+}
+
+// serialAccess covers the two reasons an Arduino or USB serial adapter
+// doesn't work: brltty (a braille display service Ubuntu installs by
+// default) taking over CH340 adapters, and the user not being in the
+// group that owns serial ports.
+func serialAccess(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Systemd {
+		if es, err := journal(ctx, s, "-b", "-k", "-g", "brltty"); err == nil {
+			for _, e := range es {
+				if strings.Contains(e.Message, "claimed by ch341 while 'brltty'") {
+					remove := doctor.Fix{Title: "Uninstall the brltty package"}
+					if c := map[string]string{"apt": "apt remove", "dnf": "dnf remove", "pacman": "pacman -R", "zypper": "zypper remove"}[h.PackageMgr]; c != "" {
+						remove = doctor.Fix{Title: "Remove brltty", Command: "sudo " + c + " brltty", NeedsRoot: true}
+					}
+					return []doctor.Finding{{
+						Status: doctor.Warn,
+						Title:  "Your USB serial adapter or Arduino disconnects as soon as it's plugged in",
+						Explain: "brltty, a service for braille displays, takes over CH340 serial chips because some braille displays use the same chip. " +
+							"The serial port then disappears right away. If you don't use a braille display, remove it.",
+						Fixes:    []doctor.Fix{remove, {Title: "Then unplug the device and plug it back in"}},
+						Evidence: []string{firstLineOf(e.Message)},
+					}}
+				}
+			}
+		}
+	}
+	devs, _ := s.Glob("/dev/ttyUSB*")
+	acm, _ := s.Glob("/dev/ttyACM*")
+	devs = append(devs, acm...)
+	if len(devs) == 0 || h.User == "" || !s.Has("test") {
+		return nil
+	}
+	group := "dialout"
+	if h.PackageMgr == "pacman" {
+		group = "uucp"
+	}
+	if b, err := s.ReadFile("/etc/group"); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			if f := strings.Split(line, ":"); len(f) == 4 && f[0] == group && slices.Contains(strings.Split(f[3], ","), h.User) {
+				return nil
+			}
+		}
+	}
+	if _, err := s.Run(ctx, "test", "-w", devs[0]); err == nil {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Warn,
+		Title:   "You don't have permission to use " + devs[0] + " (Arduino or serial device)",
+		Explain: "Serial ports belong to the " + group + " group, and your account isn't in it, so uploading to a board or opening the port fails with \"Permission denied\".",
+		Fixes: []doctor.Fix{
+			{Title: "Join the " + group + " group, then log out and back in", Command: "sudo usermod -aG " + group + " \"$USER\"", NeedsRoot: true},
+		},
+	}}
 }
 
 // lockedOut catches pam_faillock locking the account after a few wrong
