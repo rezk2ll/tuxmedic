@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
+	"github.com/rezk2ll/tuxmedic/internal/watch"
 )
 
 func fakeChecks() []doctor.Check {
@@ -68,6 +70,8 @@ func TestViewFitsEverySize(t *testing.T) {
 		"palette":  {"ctrl+p"},
 		"confirm":  {"down", "enter", "1"},
 		"filter":   {"/", "s", "o"},
+		"watch":    {"w"},
+		"stopped":  {"w", "w"},
 	}
 	for _, ascii := range []bool{false, true} {
 		for name, keys := range screens {
@@ -174,5 +178,38 @@ func TestFixIsVerified(t *testing.T) {
 	}
 	if len(m.verifying) != 0 {
 		t.Errorf("verifying not cleared: %v", m.verifying)
+	}
+}
+
+func TestWatchInTheInteractiveScreen(t *testing.T) {
+	m := newTestModel(t, false)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m.Update(key("w"))
+	if !strings.Contains(m.View().Content, "Watching your connection") {
+		t.Fatal("w didn't open the watch view")
+	}
+
+	t0 := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
+	good := watch.Sample{At: t0, Online: true, DNS: true, Wifi: "wlan0", Linked: true, Signal: -50}
+	m.Update(sampleMsg{good, m.watchGen})
+	down := watch.Sample{At: t0.Add(3 * time.Second), DNS: true, Wifi: "wlan0", Linked: true, Signal: -50}
+	m.Update(sampleMsg{down, m.watchGen})
+	if out := m.View().Content; !strings.Contains(out, "Internet lost") {
+		t.Errorf("the drop isn't shown:\n%s", out)
+	}
+
+	m.Update(key("w"))
+	stale := m.watchGen
+	m.Update(sampleMsg{good, stale})
+	if len(m.watcher.Events) != 1 {
+		t.Errorf("a reading arriving after stop was recorded: %+v", m.watcher.Events)
+	}
+	if out := m.View().Content; !strings.Contains(out, "Watch stopped") || !strings.Contains(out, "router or your provider") {
+		t.Errorf("stopped view lacks the summary:\n%s", out)
+	}
+
+	m.Update(key("esc"))
+	if m.watcher != nil || strings.Contains(m.View().Content, "Watch stopped") {
+		t.Error("esc didn't close the watch view")
 	}
 }

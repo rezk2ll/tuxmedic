@@ -9,6 +9,33 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
 
+// Watcher turns a stream of samples into events, remembering when the
+// connection went away so the event for its return says how long it was gone.
+type Watcher struct {
+	Last   Sample
+	Events []Event
+	lostAt time.Time
+}
+
+// Add records a sample and returns the events it caused.
+func (w *Watcher) Add(cur Sample) []Event {
+	if w.Last.At.IsZero() && !cur.Online {
+		w.lostAt = cur.At
+	}
+	es := Diff(w.Last, cur, w.lostAt)
+	for _, e := range es {
+		switch e.Kind {
+		case Lost:
+			w.lostAt = e.At
+		case Back:
+			w.lostAt = time.Time{}
+		}
+	}
+	w.Events = append(w.Events, es...)
+	w.Last = cur
+	return es
+}
+
 // Run samples every interval until ctx ends or dur passes (0 means until
 // Ctrl+C), printing events as they happen and a summary at the end. live
 // redraws a one-line status in place, for terminals.
@@ -23,9 +50,7 @@ func Run(ctx context.Context, s sys.System, w io.Writer, interval, dur time.Dura
 	fmt.Fprintln(w)
 
 	start := s.Now()
-	var prev Sample
-	var lostAt time.Time
-	var events []Event
+	var wt Watcher
 	status := ""
 	clear := func() {
 		if live && status != "" {
@@ -37,19 +62,11 @@ func Run(ctx context.Context, s sys.System, w io.Writer, interval, dur time.Dura
 		if ctx.Err() != nil {
 			break
 		}
-		if prev.At.IsZero() && !cur.Online {
-			lostAt = cur.At
+		if wt.Last.At.IsZero() && !cur.Online {
 			clear()
 			fmt.Fprintf(w, "%s  Offline right now\n", cur.At.Format("15:04:05"))
 		}
-		for _, e := range Diff(prev, cur, lostAt) {
-			switch e.Kind {
-			case Lost:
-				lostAt = e.At
-			case Back:
-				lostAt = time.Time{}
-			}
-			events = append(events, e)
+		for _, e := range wt.Add(cur) {
 			clear()
 			fmt.Fprintf(w, "%s  %s\n", e.At.Format("15:04:05"), e.Text)
 			status = ""
@@ -59,7 +76,6 @@ func Run(ctx context.Context, s sys.System, w io.Writer, interval, dur time.Dura
 			status = Status(cur)
 			fmt.Fprintf(w, "%s  %s", cur.At.Format("15:04:05"), status)
 		}
-		prev = cur
 		select {
 		case <-ctx.Done():
 		case <-time.After(interval):
@@ -70,8 +86,8 @@ func Run(ctx context.Context, s sys.System, w io.Writer, interval, dur time.Dura
 	}
 	clear()
 	fmt.Fprintln(w)
-	for _, line := range Summary(events, s.Now().Sub(start)) {
+	for _, line := range Summary(wt.Events, s.Now().Sub(start)) {
 		fmt.Fprintln(w, line)
 	}
-	return events
+	return wt.Events
 }

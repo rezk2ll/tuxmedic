@@ -49,7 +49,9 @@ func (m *Model) refreshDetail() {
 	}
 	w := max(20, m.detailWidth()-4)
 	var content string
-	if c := m.current(); c != nil {
+	if m.watcher != nil {
+		content, m.actions = m.renderWatch(w), nil
+	} else if c := m.current(); c != nil {
 		content, m.actions = m.renderCheck(*c, w)
 	} else {
 		content, m.actions = m.renderOverview(w)
@@ -423,7 +425,14 @@ func (m *Model) renderFooter() string {
 		if m.current() == nil {
 			num = "open"
 		}
-		hs = []hint{{"↑↓", "move"}, {"enter", "open"}, {"1-9", num}, {"/", "ask"}, {"x", "share report"}, {"ctrl+p", "commands"}, {"?", "help"}, {"q", "quit"}}
+		hs = []hint{{"↑↓", "move"}, {"enter", "open"}, {"1-9", num}, {"/", "ask"}, {"w", "watch"}, {"x", "share report"}, {"ctrl+p", "commands"}, {"?", "help"}, {"q", "quit"}}
+	}
+	if m.watcher != nil {
+		stop := "stop watching"
+		if !m.watching {
+			stop = "watch again"
+		}
+		hs = []hint{{"w", stop}, {"↑↓", "scroll"}, {"esc", "close"}, {"q", "quit"}}
 	}
 	var parts []string
 	used := 1
@@ -499,6 +508,7 @@ func (m *Model) overlay() string {
 			{"r  /  R", "check this again  /  run every check again"},
 			{"/", "describe the problem: try \"wifi keeps dropping\""},
 			{"x", "save a report to share (personal details removed)"},
+			{"w", "watch for drops and overheating as they happen"},
 			{"ctrl+p  or  :", "every command, searchable"},
 			{"mouse", "click a check, scroll with the wheel"},
 			{"q", "quit"},

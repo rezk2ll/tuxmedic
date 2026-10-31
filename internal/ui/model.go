@@ -18,6 +18,7 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/report"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
+	"github.com/rezk2ll/tuxmedic/internal/watch"
 )
 
 type Options struct {
@@ -99,6 +100,12 @@ type Model struct {
 	palSel      int
 	quitting    bool
 	lastContent string
+
+	// watcher is set while the watch view is shown; watching while it samples.
+	watcher              *watch.Watcher
+	watching             bool
+	watchStart, watchEnd time.Time
+	watchGen             int
 }
 
 // action is something the user can trigger with a number key in the detail
@@ -209,9 +216,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case sampleMsg:
+		return m, tea.Batch(m.onSample(msg), m.startTicking())
+
 	case tickMsg:
 		m.frame++
-		if !m.busy() {
+		if m.watching {
+			m.refreshDetail()
+		}
+		if !m.busy() && !m.watching {
 			m.ticking = false
 			return m, nil
 		}
@@ -308,8 +321,12 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		} else {
 			m.focus = focusDetail
 		}
+	case "w":
+		return m.toggleWatch()
 	case "esc", "left", "h", "backspace":
 		switch {
+		case m.watcher != nil && k == "esc":
+			return m.closeWatch()
 		case m.singlePane() && m.inDetail:
 			m.inDetail = false
 		case m.focus == focusDetail:
@@ -581,6 +598,7 @@ func (m *Model) paletteItems() []paletteItem {
 	items := []paletteItem{
 		{"Run every check again", "R", func(m *Model) tea.Cmd { return tea.Batch(m.runAll(), m.notify("Running every check again…")) }},
 		{"Save a report to share (names and addresses removed)", "x", func(m *Model) tea.Cmd { return m.export() }},
+		{"Watch for Wi-Fi drops and overheating while they happen", "w", func(m *Model) tea.Cmd { return m.toggleWatch() }},
 		{"Show or hide log details", "e", func(m *Model) tea.Cmd {
 			if c := m.current(); c != nil {
 				m.evidence[c.ID] = !m.evidence[c.ID]

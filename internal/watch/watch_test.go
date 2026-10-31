@@ -44,27 +44,15 @@ func TestTakeProcFallback(t *testing.T) {
 	}
 }
 
-// replay feeds samples through Diff the way Run does and returns the events.
 func replay(samples ...Sample) []Event {
-	var prev Sample
-	var lostAt time.Time
-	var es []Event
+	var w Watcher
 	t0 := time.Date(2026, 10, 31, 15, 0, 0, 0, time.UTC)
 	for i, cur := range samples {
 		cur.At = t0.Add(time.Duration(i) * 3 * time.Second)
 		cur.Wifi = "wlan0"
-		for _, e := range Diff(prev, cur, lostAt) {
-			switch e.Kind {
-			case Lost:
-				lostAt = e.At
-			case Back:
-				lostAt = time.Time{}
-			}
-			es = append(es, e)
-		}
-		prev = cur
+		w.Add(cur)
 	}
-	return es
+	return w.Events
 }
 
 var (
