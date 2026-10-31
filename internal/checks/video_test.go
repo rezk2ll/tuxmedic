@@ -81,6 +81,16 @@ func TestVideo(t *testing.T) {
 			t.Errorf("findings = %+v", r.Findings)
 		}
 	})
+	suse := &doctor.Host{ID: "opensuse-tumbleweed", PackageMgr: "zypper", Desktop: "KDE"}
+	t.Run("opensuse without packman", func(t *testing.T) {
+		f := fake(intel, intelUevent, "/usr/lib64/dri/iHD_drv_video.so", "", "/etc/zypp/repos.d/repo-oss.repo", "[repo-oss]\nname=Main Repository\n")
+		expect(t, run(t, Video, f, suse), doctor.Info, "openSUSE leaves out the H.264 and HEVC codecs")
+	})
+	t.Run("opensuse with packman", func(t *testing.T) {
+		f := fake(intel, intelUevent, "/usr/lib64/dri/iHD_drv_video.so", "",
+			"/etc/zypp/repos.d/packman-essentials.repo", "[packman-essentials]\nbaseurl=https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/Essentials\n")
+		expect(t, run(t, Video, f, suse), doctor.OK, "Intel")
+	})
 	t.Run("no desktop", func(t *testing.T) {
 		expect(t, run(t, Video, fake(intel, intelUevent), &doctor.Host{}), doctor.Skipped, "No desktop session")
 	})

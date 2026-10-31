@@ -36,12 +36,15 @@ func runVideo(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 	if h.Desktop == "" || h.Container {
 		return []doctor.Finding{{Status: doctor.Skipped, Title: "No desktop session, so no video playback to check"}}
 	}
-	return append(vaapi(s, h), fedoraCodecs(ctx, s, h)...)
+	return append(vaapi(s, h), codecs(ctx, s, h)...)
 }
 
-// fedoraCodecs catches Fedora's ffmpeg-free, which leaves out H.264, HEVC
-// and AAC: many videos and streams then won't play outside Firefox.
-func fedoraCodecs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+// codecs catches Fedora's ffmpeg-free and openSUSE without Packman, which
+// leave out H.264, HEVC and AAC: many videos and streams then won't play.
+func codecs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.PackageMgr == "zypper" && strings.HasPrefix(h.ID, "opensuse") {
+		return suseCodecs(s)
+	}
 	if h.ID != "fedora" || h.PackageMgr != "dnf" || !s.Has("rpm") {
 		return nil
 	}
@@ -61,6 +64,23 @@ func fedoraCodecs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 		Explain: "For patent reasons Fedora ships a reduced ffmpeg. Videos from phones and cameras, many streams and some sites show an error " +
 			"or play without sound. The full ffmpeg comes from RPM Fusion, the repository most Fedora users add.",
 		Fixes: []doctor.Fix{{Title: "Add RPM Fusion and switch to the full ffmpeg", Command: cmd, NeedsRoot: true, URL: "https://rpmfusion.org/Howto/Multimedia"}},
+	}}
+}
+
+// suseCodecs is the openSUSE side: the full codecs come from Packman.
+func suseCodecs(s sys.System) []doctor.Finding {
+	repos, _ := s.Glob("/etc/zypp/repos.d/*.repo")
+	for _, r := range repos {
+		if strings.Contains(strings.ToLower(readTrim(s, r)), "packman") {
+			return nil
+		}
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Many videos won't play: openSUSE leaves out the H.264 and HEVC codecs",
+		Explain: "For patent reasons openSUSE ships reduced codecs. Videos from phones and cameras and many streams fail or play without sound. " +
+			"The full codecs come from Packman, the repository most openSUSE users add.",
+		Fixes: []doctor.Fix{{Title: "Add Packman and install the codecs", Command: "sudo zypper install opi && opi codecs", NeedsRoot: true}},
 	}}
 }
 
