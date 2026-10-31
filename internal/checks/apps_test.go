@@ -109,6 +109,22 @@ func TestApps(t *testing.T) {
 		expect(t, r, doctor.Info, `A snap change is still running: Auto-refresh snap "firefox"`)
 		expect(t, r, doctor.Info, "Snap keeps 3 old versions")
 	})
+	t.Run("snap apps without removable media", func(t *testing.T) {
+		f := appsFake(nil, map[string]string{
+			"snap connections --all": "Interface        Plug                     Slot              Notes\n" +
+				"audio-playback   firefox:audio-playback   :audio-playback   -\n" +
+				"removable-media  firefox:removable-media  -                 -\n" +
+				"removable-media  vlc:removable-media      :removable-media  manual\n" +
+				"removable-media  gimp:removable-media     -                 -\n",
+		})
+		r := run(t, Apps, f, &doctor.Host{ID: "ubuntu", Session: "x11"})
+		expect(t, r, doctor.Info, "can't open files on USB drives or other disks: firefox, gimp")
+		for _, fd := range r.Findings {
+			if len(fd.Fixes) == 2 && fd.Fixes[1].Command != "sudo snap connect gimp:removable-media" {
+				t.Errorf("fix = %q", fd.Fixes[1].Command)
+			}
+		}
+	})
 	t.Run("container", func(t *testing.T) {
 		expect(t, run(t, Apps, appsFake(nil, nil), &doctor.Host{Container: true}), doctor.Skipped, "No desktop session")
 	})

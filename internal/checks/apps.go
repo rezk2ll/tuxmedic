@@ -295,6 +295,28 @@ func snaps(ctx context.Context, s sys.System) []doctor.Finding {
 			}
 		}
 	}
+	if out, err := s.Run(ctx, "snap", "connections", "--all"); err == nil {
+		var apps []string
+		for _, line := range strings.Split(string(out), "\n") {
+			f := strings.Fields(line)
+			if len(f) >= 3 && f[0] == "removable-media" && f[2] == "-" {
+				apps = append(apps, strings.TrimSuffix(f[1], ":removable-media"))
+			}
+		}
+		if len(apps) > 0 {
+			var fixes []doctor.Fix
+			for _, a := range apps {
+				fixes = append(fixes, doctor.Fix{Title: "Let " + a + " see USB drives and other disks", Command: "sudo snap connect " + a + ":removable-media", NeedsRoot: true})
+			}
+			fs = append(fs, doctor.Finding{
+				Status: doctor.Info,
+				Title:  "Some snap apps can't open files on USB drives or other disks: " + strings.Join(apps, ", "),
+				Explain: "Snap apps only see your home folder unless they're allowed more. Files under /media and /mnt don't show up " +
+					"in their Open dialog, and saving there fails.",
+				Fixes: fixes,
+			})
+		}
+	}
 	if out, err := s.Run(ctx, "snap", "list", "--all"); err == nil {
 		old := strings.Count(string(out), "disabled")
 		if old >= 3 {
