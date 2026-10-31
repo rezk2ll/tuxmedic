@@ -225,6 +225,27 @@ func TestNetwork(t *testing.T) {
 		}
 		expect(t, run(t, Network, f, nm), doctor.OK, "You're online")
 	})
+	scan := "nmcli -t -f IN-USE,SIGNAL,FREQ,SSID,DEVICE device wifi list --rescan no"
+	online := func(list string) *sys.Fake {
+		return &sys.Fake{Files: wifi, Commands: map[string]string{scan: list}, Reachable: map[string]bool{probeAddrs[0]: true}, Resolvable: map[string]bool{"debian.org": true}}
+	}
+	t.Run("on 2.4 GHz with a strong 5 GHz nearby", func(t *testing.T) {
+		r := run(t, Network, online("*:64:2437 MHz:Cafe\\:Guest:wlp2s0\n :71:5500 MHz:Cafe\\:Guest:wlp2s0\n :90:5180 MHz:Other:wlp2s0\n"), nm)
+		expect(t, r, doctor.Info, "slow 2.4 GHz band")
+		f := r.Findings[0]
+		if strings.Contains(f.Title+f.Explain, "Cafe") {
+			t.Errorf("the network name leaked into the finding: %+v", f)
+		}
+		if !strings.Contains(f.Explain, "5 GHz signal is at 71%") {
+			t.Errorf("explain = %q", f.Explain)
+		}
+	})
+	t.Run("5 GHz too weak to be worth it", func(t *testing.T) {
+		expect(t, run(t, Network, online("*:64:2437 MHz:Home:wlp2s0\n :30:5500 MHz:Home:wlp2s0\n"), nm), doctor.OK, "You're online")
+	})
+	t.Run("already on 5 GHz", func(t *testing.T) {
+		expect(t, run(t, Network, online(" :64:2437 MHz:Home:wlp2s0\n*:71:5500 MHz:Home:wlp2s0\n"), nm), doctor.OK, "You're online")
+	})
 	t.Run("dns broken", func(t *testing.T) {
 		f := &sys.Fake{Files: wifi, Reachable: map[string]bool{"9.9.9.9:443": true}}
 		expect(t, run(t, Network, f, laptop), doctor.Fail, "DNS")

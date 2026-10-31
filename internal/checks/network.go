@@ -47,6 +47,56 @@ func ipv6Route(s sys.System) string {
 	return ""
 }
 
+// slowBand catches Wi-Fi on 2.4 GHz while the same network offers a strong
+// 5 or 6 GHz signal. It reads NetworkManager's last scan and doesn't rescan.
+// The network's name stays out of the finding, so shared reports don't
+// carry it.
+func slowBand(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
+	if h.Network != "NetworkManager" || !s.Has("nmcli") {
+		return nil
+	}
+	out, err := s.Run(ctx, "nmcli", "-t", "-f", "IN-USE,SIGNAL,FREQ,SSID,DEVICE", "device", "wifi", "list", "--rescan", "no")
+	if err != nil {
+		return nil
+	}
+	type ap struct {
+		inUse        bool
+		signal, freq int
+		ssid, dev    string
+	}
+	var aps []ap
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		l = strings.ReplaceAll(l, `\:`, "\x00")
+		f := strings.Split(l, ":")
+		if len(f) != 5 {
+			continue
+		}
+		sig, _ := strconv.Atoi(f[1])
+		mhz, _ := strconv.Atoi(strings.TrimSuffix(f[2], " MHz"))
+		aps = append(aps, ap{f[0] == "*", sig, mhz, strings.ReplaceAll(f[3], "\x00", ":"), f[4]})
+	}
+	for _, cur := range aps {
+		if !cur.inUse || cur.freq >= 3000 || cur.ssid == "" {
+			continue
+		}
+		for _, o := range aps {
+			if o.ssid == cur.ssid && o.freq >= 5000 && o.signal >= 50 {
+				return &doctor.Finding{
+					Status: doctor.Info,
+					Title:  "Wi-Fi is on the slow 2.4 GHz band, but your network also has a strong 5 GHz signal",
+					Explain: fmt.Sprintf("2.4 GHz is often several times slower and more crowded. Your network's %d GHz signal is at %d%%, "+
+						"so you'd likely get faster, steadier Wi-Fi there.", o.freq/1000, o.signal),
+					Fixes: []doctor.Fix{
+						{Title: "Reconnect so the laptop can pick the faster band", Command: "nmcli device disconnect " + cur.dev + " && nmcli device connect " + cur.dev},
+						{Title: "If it keeps picking 2.4 GHz, give the 5 GHz network its own name in the router settings"},
+					},
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // brokenIPv6 catches a network that hands out IPv6 but doesn't route it.
 // Apps try IPv6 first, so every site stalls for seconds before loading.
 func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
@@ -156,6 +206,9 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	switch {
 	case online && resolves:
 		if b := brokenIPv6(ctx, s, h); b != nil {
+			fs = append(fs, *b)
+		}
+		if b := slowBand(ctx, s, h); b != nil {
 			fs = append(fs, *b)
 		}
 		f := doctor.Finding{Status: doctor.OK, Title: "You're online"}
