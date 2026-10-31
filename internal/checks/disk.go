@@ -115,7 +115,53 @@ func runDisk(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	}
 	fs = append(fs, ioErrors(ctx, s)...)
 	fs = append(fs, smartHealth(ctx, s, h)...)
+	fs = append(fs, noTrim(ctx, s, h)...)
 	return fs
+}
+
+// noTrim catches SSDs that are never told which blocks are free. Ubuntu
+// and Fedora turn on the weekly fstrim timer; Arch and many others leave
+// it off, and the drive slowly gets slower to write.
+func noTrim(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if !h.Systemd || h.Container || !s.Has("systemctl") {
+		return nil
+	}
+	var ssds []string
+	rot, _ := s.Glob("/sys/block/*/queue/rotational")
+	for _, r := range rot {
+		dev := filepath.Base(filepath.Dir(filepath.Dir(r)))
+		if strings.HasPrefix(dev, "loop") || strings.HasPrefix(dev, "zram") || strings.HasPrefix(dev, "ram") ||
+			strings.HasPrefix(dev, "dm-") || strings.HasPrefix(dev, "md") || strings.HasPrefix(dev, "sr") {
+			continue
+		}
+		disc := readTrim(s, filepath.Join(filepath.Dir(r), "discard_max_bytes"))
+		if readTrim(s, r) == "0" && disc != "" && disc != "0" {
+			ssds = append(ssds, dev)
+		}
+	}
+	if len(ssds) == 0 {
+		return nil
+	}
+	for _, m := range mounts(s) {
+		for _, o := range strings.Split(m.options, ",") {
+			if o == "discard" || strings.HasPrefix(o, "discard=") {
+				return nil
+			}
+		}
+	}
+	if out, _ := s.Run(ctx, "systemctl", "is-enabled", "fstrim.timer"); strings.TrimSpace(string(out)) != "disabled" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Your SSD is never told which space is free (TRIM is off)",
+		Explain: "SSDs write fastest to blocks they know are empty. Without a regular TRIM, the drive slowly gets slower to write and wears a little faster. " +
+			"Most distros run it once a week; on this system the weekly job is switched off.",
+		Fixes: []doctor.Fix{
+			{Title: "Turn on the weekly TRIM", Command: "sudo systemctl enable --now fstrim.timer", NeedsRoot: true},
+		},
+		Evidence: []string{"solid-state: " + strings.Join(ssds, ", "), "fstrim.timer: disabled"},
+	}}
 }
 
 func hasOpt(opts, want string) bool {
