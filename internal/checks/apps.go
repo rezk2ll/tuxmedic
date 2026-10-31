@@ -34,7 +34,45 @@ func runApps(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	fs = append(fs, snaps(ctx, s)...)
 	fs = append(fs, fileWatches(s)...)
 	fs = append(fs, brokenExtensions(ctx, s, h)...)
+	fs = append(fs, appImagesNoFuse(s, h)...)
 	return fs
+}
+
+// appImagesNoFuse catches AppImages next to a system without libfuse2,
+// which older AppImages need to open ("dlopen(): error loading
+// libfuse.so.2"). Distros stopped installing it when they moved to FUSE 3.
+func appImagesNoFuse(s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Home == "" {
+		return nil
+	}
+	var apps []string
+	for _, d := range []string{"/Applications", "/Downloads", "/.local/bin", "", "/Desktop"} {
+		hits, _ := s.Glob(h.Home + d + "/*.[Aa]pp[Ii]mage")
+		apps = append(apps, hits...)
+	}
+	if len(apps) == 0 {
+		return nil
+	}
+	for _, p := range []string{"/usr/lib/*/libfuse.so.2", "/usr/lib64/libfuse.so.2", "/usr/lib/libfuse.so.2", "/lib/*/libfuse.so.2"} {
+		if hits, _ := s.Glob(p); len(hits) > 0 {
+			return nil
+		}
+	}
+	fix := doctor.Fix{Title: "Install your distro's FUSE 2 library (often called libfuse2 or fuse2)"}
+	switch h.PackageMgr {
+	case "apt":
+		fix = doctor.Fix{Title: "Install FUSE 2 (libfuse2t64 on Ubuntu 24.04 and Debian 13 and newer)", Command: "sudo apt install libfuse2t64 || sudo apt install libfuse2", NeedsRoot: true}
+	case "dnf", "pacman", "zypper":
+		fix = installFix(h, map[string]string{"dnf": "fuse-libs", "pacman": "fuse2", "zypper": "libfuse2"}[h.PackageMgr])
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "If an AppImage won't open: the FUSE 2 library it needs isn't installed",
+		Explain: "Most AppImages built before 2024 need libfuse2 to start, and this system doesn't have it. " +
+			"They then quit with \"dlopen(): error loading libfuse.so.2\", or don't open at all when you double-click them.",
+		Fixes:    []doctor.Fix{fix, {Title: "Or run one without FUSE", Command: quoteAll(apps[:1])[0] + " --appimage-extract-and-run"}},
+		Evidence: []string{plural(len(apps), "AppImage", "AppImages") + " found, no libfuse.so.2"},
+	}}
 }
 
 // brokenExtensions lists GNOME Shell extensions the running shell refused

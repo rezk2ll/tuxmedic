@@ -7,6 +7,29 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
 
+func TestAppImagesNoFuse(t *testing.T) {
+	h := &doctor.Host{ID: "ubuntu", PackageMgr: "apt", Home: "/home/alex"}
+	app := "/home/alex/Applications/Some Editor-1.2-x86_64.AppImage"
+
+	fs := appImagesNoFuse(&sys.Fake{Files: files(app, "")}, h)
+	if len(fs) != 1 || fs[0].Fixes[0].Command != "sudo apt install libfuse2t64 || sudo apt install libfuse2" {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if c := fs[0].Fixes[1].Command; c != "'"+app+"' --appimage-extract-and-run" {
+		t.Errorf("fix = %q", c)
+	}
+	if fs := appImagesNoFuse(&sys.Fake{Files: files(app, "", "/usr/lib/x86_64-linux-gnu/libfuse.so.2", "")}, h); len(fs) != 0 {
+		t.Errorf("libfuse2 installed: %+v", fs)
+	}
+	if fs := appImagesNoFuse(&sys.Fake{}, h); len(fs) != 0 {
+		t.Errorf("no AppImages: %+v", fs)
+	}
+	fs = appImagesNoFuse(&sys.Fake{Files: files("/home/alex/Downloads/tool.appimage", "")}, &doctor.Host{PackageMgr: "pacman", Home: "/home/alex"})
+	if len(fs) != 1 || fs[0].Fixes[0].Command != "sudo pacman -S fuse2" {
+		t.Errorf("arch = %+v", fs)
+	}
+}
+
 func TestBrokenExtensions(t *testing.T) {
 	gnome := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Desktop: "GNOME", Systemd: true}
 	list := "gnome-extensions list --enabled --details"
