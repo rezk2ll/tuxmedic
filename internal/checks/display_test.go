@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -64,6 +65,45 @@ func TestDisplay(t *testing.T) {
 			expect(t, run(t, Display, screens(tc.files), nil), tc.st, tc.want)
 		})
 	}
+}
+
+func TestBlurryXwayland(t *testing.T) {
+	gnome := &doctor.Host{ID: "fedora", Desktop: "GNOME", Session: "wayland"}
+	state := "gdbus call --session --dest org.gnome.Mutter.DisplayConfig --object-path /org/gnome/Mutter/DisplayConfig --method org.gnome.Mutter.DisplayConfig.GetCurrentState"
+	at := func(scale string) string {
+		return "(uint32 7, [(('eDP-1', 'ACME', 'Panel', '0x00000000'), [('1920x1200@60', 1920, 1200, 60.0, 1.0, [1.0, 1.25, 1.5], {})], {})], " +
+			"[(0, 0, " + scale + ", uint32 0, true, [('eDP-1', 'ACME', 'Panel', '0x00000000')], @a{sv} {})], {})"
+	}
+	cmds := func(scale, shell, feats string) *sys.Fake {
+		f := screens(nil)
+		f.Commands = map[string]string{state: at(scale), "gnome-shell --version": shell, "gsettings get org.gnome.mutter experimental-features": feats}
+		return f
+	}
+
+	t.Run("125% without native scaling", func(t *testing.T) {
+		r := run(t, Display, cmds("1.25", "GNOME Shell 48.2\n", "['scale-monitor-framebuffer', 'variable-refresh-rate']\n"), gnome)
+		expect(t, r, doctor.Info, "Some apps look blurry at 125% scaling")
+		want := `gsettings set org.gnome.mutter experimental-features "['scale-monitor-framebuffer', 'xwayland-native-scaling', 'variable-refresh-rate']"`
+		if got := r.Findings[0].Fixes[0].Command; got != want {
+			t.Errorf("fix = %q\nwant  %q", got, want)
+		}
+	})
+	t.Run("already on", func(t *testing.T) {
+		r := run(t, Display, cmds("1.5", "GNOME Shell 48.2\n", "['scale-monitor-framebuffer', 'xwayland-native-scaling']\n"), gnome)
+		expect(t, r, doctor.OK, "Screens in use")
+	})
+	t.Run("whole-number scale", func(t *testing.T) {
+		expect(t, run(t, Display, cmds("2", "GNOME Shell 48.2\n", "@as []\n"), gnome), doctor.OK, "Screens in use")
+	})
+	t.Run("GNOME 46 has no such setting", func(t *testing.T) {
+		expect(t, run(t, Display, cmds("1.25", "GNOME Shell 46.0\n", "@as []\n"), gnome), doctor.OK, "Screens in use")
+	})
+	t.Run("empty feature list", func(t *testing.T) {
+		r := run(t, Display, cmds("1.75", "GNOME Shell 47.1\n", "@as []\n"), gnome)
+		if got := r.Findings[0].Fixes[0].Command; !strings.HasSuffix(got, `"['scale-monitor-framebuffer', 'xwayland-native-scaling']"`) {
+			t.Errorf("fix = %q", got)
+		}
+	})
 }
 
 func TestBrightness(t *testing.T) {

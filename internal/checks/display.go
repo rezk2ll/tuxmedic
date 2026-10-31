@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -91,7 +94,58 @@ func edidName(b []byte) string {
 	return ""
 }
 
-func runDisplay(_ context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+var logicalScale = regexp.MustCompile(`\(-?\d+, -?\d+, ([0-9.]+), uint32 \d+, (?:true|false), \[`)
+
+// blurryXwayland catches GNOME on Wayland at a fractional scale without
+// xwayland-native-scaling (GNOME 47 and later). XWayland apps, which
+// includes most Electron apps, are then drawn at 100% and stretched.
+func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Session != "wayland" || !strings.Contains(strings.ToLower(h.Desktop), "gnome") || !s.Has("gdbus") || !s.Has("gsettings") {
+		return nil
+	}
+	out, err := s.Run(ctx, "gdbus", "call", "--session", "--dest", "org.gnome.Mutter.DisplayConfig",
+		"--object-path", "/org/gnome/Mutter/DisplayConfig", "--method", "org.gnome.Mutter.DisplayConfig.GetCurrentState")
+	if err != nil {
+		return nil
+	}
+	scale := ""
+	for _, m := range logicalScale.FindAllStringSubmatch(string(out), -1) {
+		if f, err := strconv.ParseFloat(m[1], 64); err == nil && f != float64(int(f)) {
+			scale = fmt.Sprintf("%.0f%%", f*100)
+		}
+	}
+	if scale == "" {
+		return nil
+	}
+	ver, _ := s.Run(ctx, "gnome-shell", "--version")
+	var major int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(ver)), "GNOME Shell %d", &major); err != nil || major < 47 {
+		return nil
+	}
+	feats, _ := s.Run(ctx, "gsettings", "get", "org.gnome.mutter", "experimental-features")
+	cur := string(feats)
+	if strings.Contains(cur, "xwayland-native-scaling") {
+		return nil
+	}
+	want := []string{"'scale-monitor-framebuffer'", "'xwayland-native-scaling'"}
+	for _, f := range strings.Split(strings.Trim(strings.TrimPrefix(strings.TrimSpace(cur), "@as"), " []"), ",") {
+		if f = strings.TrimSpace(f); f != "" && !slices.Contains(want, f) {
+			want = append(want, f)
+		}
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Some apps look blurry at " + scale + " scaling",
+		Explain: "Apps that still use X11, like many Electron apps (VS Code, Slack, Discord) and older programs, are drawn at 100% " +
+			"and then stretched, so their text looks soft. GNOME can draw them sharp instead.",
+		Fixes: []doctor.Fix{
+			{Title: "Draw X11 apps at the real scale (log out and back in after)", Command: "gsettings set org.gnome.mutter experimental-features \"[" + strings.Join(want, ", ") + "]\""},
+			{Title: "Or start an Electron app with --ozone-platform-hint=auto, so it runs as a Wayland app"},
+		},
+	}}
+}
+
+func runDisplay(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	conns := connectors(s)
 	var fs []doctor.Finding
 	if len(conns) == 0 {
@@ -142,6 +196,7 @@ func runDisplay(_ context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 	if h.Laptop && h.Virtual == "" && !h.Container {
 		fs = append(fs, backlight(s, h, conns)...)
 	}
+	fs = append(fs, blurryXwayland(ctx, s, h)...)
 
 	if len(active) > 0 {
 		fs = append(fs, doctor.Finding{
