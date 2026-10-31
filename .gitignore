@@ -1,5 +1,6 @@
 /tuxmedic
 /dist/
+/dist-extra/
 *.test
 *.out
 tuxmedic-report-*.md

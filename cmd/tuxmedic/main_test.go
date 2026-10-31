@@ -21,6 +21,12 @@ func TestCLI(t *testing.T) {
 		{args: []string{"check", "nosuchcheck"}, code: 2, stderr: `no check called "nosuchcheck"`},
 		{args: []string{"--nope"}, code: 2, stderr: "Usage:"},
 		{args: []string{"ask"}, code: 2, stderr: "ask what?"},
+		{args: []string{"completion", "bash"}, stdout: "complete -F _tuxmedic tuxmedic"},
+		{args: []string{"completion", "zsh"}, stdout: "#compdef tuxmedic"},
+		{args: []string{"completion", "fish"}, stdout: "__fish_seen_subcommand_from check"},
+		{args: []string{"completion", "tcsh"}, code: 2, stderr: "pick bash, zsh or fish"},
+		{args: []string{"completion"}, code: 2, stderr: "needs a shell"},
+		{args: []string{"man"}, stdout: ".SH CHECKS"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

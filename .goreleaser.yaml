@@ -3,6 +3,14 @@ version: 2
 
 project_name: tuxmedic
 
+before:
+  hooks:
+    - mkdir -p dist-extra
+    - sh -c "go run ./cmd/tuxmedic completion bash > dist-extra/tuxmedic.bash"
+    - sh -c "go run ./cmd/tuxmedic completion zsh > dist-extra/_tuxmedic"
+    - sh -c "go run ./cmd/tuxmedic completion fish > dist-extra/tuxmedic.fish"
+    - sh -c "go run ./cmd/tuxmedic man | gzip -9n > dist-extra/tuxmedic.1.gz"
+
 builds:
   - main: ./cmd/tuxmedic
     env:
@@ -21,6 +29,9 @@ archives:
     files:
       - LICENSE
       - README.md
+      - src: dist-extra/*
+        dst: extra
+        strip_parent: true
 
 nfpms:
   - package_name: tuxmedic
@@ -39,6 +50,14 @@ nfpms:
     contents:
       - src: LICENSE
         dst: /usr/share/licenses/tuxmedic/LICENSE
+      - src: dist-extra/tuxmedic.1.gz
+        dst: /usr/share/man/man1/tuxmedic.1.gz
+      - src: dist-extra/tuxmedic.bash
+        dst: /usr/share/bash-completion/completions/tuxmedic
+      - src: dist-extra/_tuxmedic
+        dst: /usr/share/zsh/site-functions/_tuxmedic
+      - src: dist-extra/tuxmedic.fish
+        dst: /usr/share/fish/vendor_completions.d/tuxmedic.fish
     archlinux:
       packager: rezk2ll <6764881+rezk2ll@users.noreply.github.com>
 

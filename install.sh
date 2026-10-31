@@ -40,10 +40,19 @@ get "$base/checksums.txt" >"$tmp/checksums.txt"
 	exit 1
 }
 
-tar -xzf "$tmp/$archive" -C "$tmp" tuxmedic
+tar -xzf "$tmp/$archive" -C "$tmp"
 mkdir -p "$bindir"
 install -m 0755 "$tmp/tuxmedic" "$bindir/tuxmedic"
 echo "Installed $bindir/tuxmedic"
+
+# Man page and completions, into the per-user folders each tool already searches.
+if [ -d "$tmp/extra" ]; then
+	data=${XDG_DATA_HOME:-"$HOME/.local/share"}
+	install -Dm 0644 "$tmp/extra/tuxmedic.1.gz" "$data/man/man1/tuxmedic.1.gz"
+	install -Dm 0644 "$tmp/extra/tuxmedic.bash" "$data/bash-completion/completions/tuxmedic"
+	install -Dm 0644 "$tmp/extra/tuxmedic.fish" "$data/fish/vendor_completions.d/tuxmedic.fish"
+	install -Dm 0644 "$tmp/extra/_tuxmedic" "$data/zsh/site-functions/_tuxmedic"
+fi
 
 case ":$PATH:" in
 	*":$bindir:"*) echo "Run: tuxmedic" ;;

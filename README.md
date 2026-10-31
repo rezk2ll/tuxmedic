@@ -71,6 +71,8 @@ In the interactive screen, press a number to open a check, then a number to run 
 
 `tuxmedic check` exits with 1 when it finds a problem, so it works in scripts.
 
+The packages and the install script add `man tuxmedic` and tab completion for bash, zsh and fish. With `go install`, add completion yourself, for example `tuxmedic completion bash > ~/.local/share/bash-completion/completions/tuxmedic`.
+
 ## Requirements
 
 - Any Linux distro. CI installs and runs it on Ubuntu, Debian, Fedora, Arch, openSUSE, Alpine and Void. Checks that need systemd say so and step aside on systems without it.

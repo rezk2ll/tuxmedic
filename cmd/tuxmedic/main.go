@@ -107,6 +107,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%-10s %s\n", c.ID, c.Question)
 		}
 		return 0
+	case "completion":
+		if len(rest) != 1 {
+			fmt.Fprintln(stderr, "tuxmedic: completion needs a shell: bash, zsh or fish")
+			return 2
+		}
+		if err := completion(stdout, rest[0], all); err != nil {
+			fmt.Fprintln(stderr, "tuxmedic:", err)
+			return 2
+		}
+		return 0
+	case "man":
+		manPage(stdout, all)
+		return 0
 	case "watch":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
