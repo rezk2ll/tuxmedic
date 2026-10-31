@@ -58,6 +58,8 @@ func runVMs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding 
 	}
 	if f, ok := libvirtOff(ctx, s, h); ok {
 		fs = append(fs, f)
+	} else {
+		fs = append(fs, libvirtNetOff(ctx, s)...)
 	}
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Hardware virtualization is on (" + flag + ")"})
@@ -168,6 +170,39 @@ func libvirtOff(ctx context.Context, s sys.System, h *doctor.Host) (doctor.Findi
 		Fixes:    []doctor.Fix{{Title: "Start libvirt now and at every startup", Command: "sudo systemctl enable --now " + unit, NeedsRoot: true}},
 		Evidence: []string{strings.Join(libvirtUnits, ", ") + ": not running"},
 	}, true
+}
+
+// libvirtNetOff catches libvirt's NAT network left stopped, which makes
+// machines fail with "network 'default' is not active" or start offline.
+// virsh only answers for the system connection when you're in the libvirt
+// group or root; otherwise it fails and nothing is reported.
+func libvirtNetOff(ctx context.Context, s sys.System) []doctor.Finding {
+	if !s.Has("virsh") {
+		return nil
+	}
+	out, err := s.Run(ctx, "virsh", "-c", "qemu:///system", "net-list", "--all")
+	if err != nil {
+		return nil
+	}
+	for _, l := range strings.Split(string(out), "\n") {
+		f := strings.Fields(l)
+		if len(f) < 3 || f[0] != "default" || f[1] != "inactive" {
+			continue
+		}
+		fix := doctor.Fix{Title: "Start it now and at every startup", Command: "sudo virsh net-start default && sudo virsh net-autostart default", NeedsRoot: true}
+		if f[2] == "yes" {
+			fix = doctor.Fix{Title: "Start it now", Command: "sudo virsh net-start default", NeedsRoot: true}
+		}
+		return []doctor.Finding{{
+			Status: doctor.Warn,
+			Title:  "libvirt's default network is stopped, so virtual machines have no internet",
+			Explain: "Machines made with virt-manager or GNOME Boxes connect through libvirt's \"default\" network. While it's stopped, " +
+				"they fail to start with \"network 'default' is not active\", or start with no connection.",
+			Fixes:    []doctor.Fix{fix},
+			Evidence: []string{strings.TrimSpace(l)},
+		}}
+	}
+	return nil
 }
 
 // vboxVsKVM catches VirtualBox failing because KVM already holds the

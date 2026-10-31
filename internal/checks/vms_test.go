@@ -69,6 +69,19 @@ func TestVMs(t *testing.T) {
 		f.Commands[q] = "inactive\nactive\ninactive\ninactive\n"
 		expect(t, run(t, VMs, f, h), doctor.OK, "AMD-V")
 	})
+	t.Run("default network stopped", func(t *testing.T) {
+		f := fake("svm", []string{"virsh", "systemctl"}, "/dev/kvm", "")
+		f.Commands[q] = "inactive\nactive\ninactive\ninactive\n"
+		nets := " Name      State      Autostart   Persistent\n----------------------------------------------\n default   inactive   no          yes\n\n"
+		f.Commands["virsh -c qemu:///system net-list --all"] = nets
+		r := run(t, VMs, f, h)
+		expect(t, r, doctor.Warn, "libvirt's default network is stopped")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo virsh net-start default && sudo virsh net-autostart default" {
+			t.Errorf("fix = %q", c)
+		}
+		f.Commands["virsh -c qemu:///system net-list --all"] = strings.Replace(nets, "inactive", "active  ", 1)
+		expect(t, run(t, VMs, f, h), doctor.OK, "AMD-V")
+	})
 	t.Run("inside a VM", func(t *testing.T) {
 		expect(t, run(t, VMs, fake("", []string{"virsh"}), &doctor.Host{Virtual: "kvm"}), doctor.Skipped, "No virtual machine or container app")
 	})
