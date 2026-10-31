@@ -1,12 +1,40 @@
 package checks
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
+
+func TestLowRefresh(t *testing.T) {
+	x11 := &doctor.Host{Session: "x11"}
+	xr := "Screen 0: minimum 8 x 8, current 4480 x 1440, maximum 32767 x 32767\n" +
+		"eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 309mm x 174mm\n" +
+		"   1920x1080     60.02*+  48.00\n" +
+		"DP-2 connected 2560x1440+1920+0 (normal left inverted right x axis y axis) 597mm x 336mm\n" +
+		"   2560x1440     59.95*+ 143.97   119.88\n" +
+		"   1920x1080     60.00    143.85\n" +
+		"HDMI-1 disconnected (normal left inverted right x axis y axis)\n"
+	fake := &sys.Fake{Commands: map[string]string{"xrandr --current": xr}}
+
+	fs := lowRefresh(context.Background(), fake, x11)
+	if len(fs) != 1 || fs[0].Title != "DP-2 runs at 60 Hz, but it can do 144 Hz" {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if c := fs[0].Fixes[0].Command; c != "xrandr --output DP-2 --mode 2560x1440 --rate 143.97" {
+		t.Errorf("fix = %q", c)
+	}
+	if fs := lowRefresh(context.Background(), fake, &doctor.Host{Session: "wayland"}); len(fs) != 0 {
+		t.Errorf("wayland: %+v", fs)
+	}
+	fast := &sys.Fake{Commands: map[string]string{"xrandr --current": strings.Replace(xr, "59.95*+ 143.97", "59.95 + 143.97*", 1)}}
+	if fs := lowRefresh(context.Background(), fast, x11); len(fs) != 0 {
+		t.Errorf("already fast: %+v", fs)
+	}
+}
 
 func edid(name string) string {
 	b := make([]byte, 128)

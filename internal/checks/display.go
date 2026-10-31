@@ -145,6 +145,61 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	}}
 }
 
+// lowRefresh catches a fast monitor left at 60 Hz, the default many
+// desktops pick, at its current resolution. Only on X11: under Wayland,
+// xrandr sees XWayland's made-up modes.
+func lowRefresh(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Session != "x11" || !s.Has("xrandr") {
+		return nil
+	}
+	out, err := s.Run(ctx, "xrandr", "--current")
+	if err != nil {
+		return nil
+	}
+	var fs []doctor.Finding
+	output := ""
+	for _, l := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(l, " ") {
+			output = ""
+			if f := strings.Fields(l); len(f) > 1 && f[1] == "connected" {
+				output = f[0]
+			}
+			continue
+		}
+		f := strings.Fields(l)
+		if output == "" || len(f) < 2 || !strings.Contains(l, "*") {
+			continue
+		}
+		var cur, top float64
+		topText := ""
+		for _, r := range f[1:] {
+			v, err := strconv.ParseFloat(strings.TrimRight(r, "*+"), 64)
+			if err != nil {
+				continue
+			}
+			if strings.Contains(r, "*") {
+				cur = v
+			}
+			if v > top {
+				top, topText = v, strings.TrimRight(r, "*+")
+			}
+		}
+		if cur > 0 && top >= 90 && top >= cur*1.4 {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   fmt.Sprintf("%s runs at %.0f Hz, but it can do %.0f Hz", output, cur, top),
+				Explain: "Your monitor supports a faster refresh rate, which makes scrolling, the mouse pointer and games look smoother. It's set to the slower one.",
+				Fixes: []doctor.Fix{
+					{Title: "Switch now (until you log out)", Command: "xrandr --output " + output + " --mode " + f[0] + " --rate " + topText},
+					{Title: "To keep it, pick the refresh rate in your display settings"},
+				},
+				Evidence: []string{output + ": " + strings.Join(f, " ")},
+			})
+		}
+	}
+	return fs
+}
+
 func runDisplay(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	conns := connectors(s)
 	var fs []doctor.Finding
@@ -197,6 +252,7 @@ func runDisplay(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		fs = append(fs, backlight(s, h, conns)...)
 	}
 	fs = append(fs, blurryXwayland(ctx, s, h)...)
+	fs = append(fs, lowRefresh(ctx, s, h)...)
 
 	if len(active) > 0 {
 		fs = append(fs, doctor.Finding{
