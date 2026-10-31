@@ -32,7 +32,55 @@ func normLocale(l string) string {
 }
 
 func runLocale(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
-	return append(languages(ctx, s, h), emojiFont(ctx, s, h)...)
+	fs := append(languages(ctx, s, h), emojiFont(ctx, s, h)...)
+	return append(fs, officeFonts(ctx, s, h)...)
+}
+
+// officeFonts checks that the fonts most documents are written in resolve
+// to themselves or to a font with the same letter widths. Any other
+// substitute reflows the text, so pages break in different places.
+func officeFonts(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Desktop == "" || !s.Has("fc-match") || !s.Has("libreoffice") && !s.Has("soffice") {
+		return nil
+	}
+	same := map[string][]string{
+		"Arial":           {"Arial", "Liberation Sans", "Arimo"},
+		"Times New Roman": {"Times New Roman", "Liberation Serif", "Tinos"},
+		"Calibri":         {"Calibri", "Carlito"},
+		"Cambria":         {"Cambria", "Caladea"},
+	}
+	var missing []string
+	for _, font := range []string{"Arial", "Times New Roman", "Calibri", "Cambria"} {
+		out, err := s.Run(ctx, "fc-match", "-f", "%{family}", font)
+		if err != nil {
+			return nil
+		}
+		got, _, _ := strings.Cut(strings.TrimSpace(string(out)), ",")
+		if !slices.Contains(same[font], got) {
+			missing = append(missing, font+" (shown as "+got+")")
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	pkgs := map[string]string{
+		"apt":    "sudo apt install fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea",
+		"dnf":    "sudo dnf install liberation-fonts google-carlito-fonts google-caladea-fonts",
+		"pacman": "sudo pacman -S ttf-liberation ttf-carlito ttf-caladea",
+		"zypper": "sudo zypper install liberation-fonts google-carlito-fonts google-caladea-fonts",
+	}
+	fix := doctor.Fix{Title: "Install the Liberation, Carlito and Caladea fonts"}
+	if c := pkgs[h.PackageMgr]; c != "" {
+		fix.Command, fix.NeedsRoot = c, true
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Word documents may look different here: " + plural(len(missing), "common font has", "common fonts have") + " no match",
+		Explain: "Documents from Windows and Mac mostly use Arial, Times New Roman, Calibri and Cambria. Free fonts with the exact same letter widths exist; " +
+			"without them, a substitute takes the space differently and text moves to other lines and pages.",
+		Fixes:    []doctor.Fix{fix},
+		Evidence: missing,
+	}}
 }
 
 // emojiFont looks for a font that declares emoji (fontconfig's und-zsye).

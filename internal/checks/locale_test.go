@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -67,6 +69,32 @@ func TestLocale(t *testing.T) {
 	t.Run("no locale command", func(t *testing.T) {
 		expect(t, run(t, Locale, &sys.Fake{}, nil), doctor.Skipped, "locale command is missing")
 	})
+}
+
+func TestOfficeFonts(t *testing.T) {
+	h := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Desktop: "GNOME"}
+	fake := func(arial, times, calibri, cambria string) *sys.Fake {
+		return &sys.Fake{Commands: map[string]string{
+			"libreoffice --version":                 "",
+			"fc-match -f %{family} Arial":           arial,
+			"fc-match -f %{family} Times New Roman": times,
+			"fc-match -f %{family} Calibri":         calibri,
+			"fc-match -f %{family} Cambria":         cambria,
+		}}
+	}
+	fs := officeFonts(context.Background(), fake("Liberation Sans", "Tinos", "DejaVu Sans", "DejaVu Serif,DejaVu Serif Condensed"), h)
+	if len(fs) != 1 || !strings.Contains(fs[0].Title, "2 common fonts have no match") || fs[0].Evidence[1] != "Cambria (shown as DejaVu Serif)" {
+		t.Fatalf("findings = %+v", fs)
+	}
+	if fs[0].Fixes[0].Command != "sudo dnf install liberation-fonts google-carlito-fonts google-caladea-fonts" {
+		t.Errorf("fix = %q", fs[0].Fixes[0].Command)
+	}
+	if fs := officeFonts(context.Background(), fake("Arimo", "Times New Roman", "Carlito", "Caladea"), h); len(fs) != 0 {
+		t.Errorf("all metric-compatible: %+v", fs)
+	}
+	if fs := officeFonts(context.Background(), fake("DejaVu Sans", "DejaVu Serif", "DejaVu Sans", "DejaVu Serif"), &doctor.Host{}); len(fs) != 0 {
+		t.Errorf("no desktop: %+v", fs)
+	}
 }
 
 func TestNormLocale(t *testing.T) {
