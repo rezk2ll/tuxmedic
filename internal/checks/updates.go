@@ -98,6 +98,19 @@ func endOfLife(s sys.System) []doctor.Finding {
 		return nil
 	}
 	kv := parseKV(string(osr))
+	// SUPPORT_END is the standard os-release field; Fedora sets it.
+	if end, err := time.Parse("2006-01-02", kv["SUPPORT_END"]); err == nil {
+		if s.Now().Before(end) {
+			return nil
+		}
+		return []doctor.Finding{{
+			Status:   doctor.Warn,
+			Title:    firstNonEmpty(kv["PRETTY_NAME"], kv["NAME"], "This release") + " no longer gets security updates",
+			Explain:  eolExplain(end),
+			Fixes:    []doctor.Fix{{Title: "Upgrade to the next release with your distro's upgrade tool"}},
+			Evidence: []string{"/etc/os-release: SUPPORT_END=" + kv["SUPPORT_END"]},
+		}}
+	}
 	table, series, name := "ubuntu", kv["UBUNTU_CODENAME"], "Ubuntu"
 	if series == "" {
 		if kv["ID"] != "debian" {
@@ -133,10 +146,9 @@ func endOfLife(s sys.System) []doctor.Finding {
 		}
 		release := name + " " + row[0] + " (" + row[1] + ")"
 		f := doctor.Finding{
-			Status: doctor.Warn,
-			Title:  release + " no longer gets security updates",
-			Explain: "Its support ended on " + end.Format("2 January 2006") + ". Security holes found since then stay open, and new apps " +
-				"and drivers increasingly don't install. Upgrading to a newer release keeps your files and apps.",
+			Status:   doctor.Warn,
+			Title:    release + " no longer gets security updates",
+			Explain:  eolExplain(end),
 			Fixes:    []doctor.Fix{{Title: "Upgrade to the next release", URL: map[string]string{"ubuntu": "https://help.ubuntu.com/community/UpgradeNotes", "debian": "https://www.debian.org/releases/"}[table]}},
 			Evidence: []string{"/usr/share/distro-info/" + table + ".csv: " + l},
 		}
@@ -149,6 +161,11 @@ func endOfLife(s sys.System) []doctor.Finding {
 		return []doctor.Finding{f}
 	}
 	return nil
+}
+
+func eolExplain(end time.Time) string {
+	return "Its support ended on " + end.Format("2 January 2006") + ". Security holes found since then stay open, and new apps " +
+		"and drivers increasingly don't install. Upgrading to a newer release keeps your files and apps."
 }
 
 // flathubOff catches a Flatpak setup where Flathub, where nearly all

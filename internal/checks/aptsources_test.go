@@ -82,8 +82,12 @@ func TestEndOfLife(t *testing.T) {
 	if len(fs) != 1 || fs[0].Status != doctor.Warn {
 		t.Errorf("debian past LTS = %+v", fs)
 	}
-	if fs := endOfLife(fake("ID=fedora\nVERSION_ID=44\n")); len(fs) != 0 {
-		t.Errorf("fedora: %+v", fs)
+	if fs := endOfLife(fake("ID=fedora\nVERSION_ID=44\nSUPPORT_END=2027-05-19\n")); len(fs) != 0 {
+		t.Errorf("supported fedora: %+v", fs)
+	}
+	fs = endOfLife(fake("ID=fedora\nPRETTY_NAME=\"Fedora Linux 41 (Workstation Edition)\"\nSUPPORT_END=2025-12-15\n"))
+	if len(fs) != 1 || fs[0].Title != "Fedora Linux 41 (Workstation Edition) no longer gets security updates" {
+		t.Errorf("old fedora = %+v", fs)
 	}
 	future := fake("ID=ubuntu\nUBUNTU_CODENAME=jammy\n")
 	future.Clock = time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC)
