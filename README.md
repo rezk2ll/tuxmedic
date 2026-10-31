@@ -15,7 +15,7 @@ Find out what's wrong with your Linux computer, and how to fix it.
 
 The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
 
-tuxmedic asks them for you. It runs 20 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+tuxmedic asks them for you. It runs 21 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
 
 ## What it checks
 
@@ -28,6 +28,7 @@ Each check answers a question people actually ask:
 - Screen sharing & app sandbox: why is my shared screen black on Wayland? A missing or crashed desktop portal, no PipeWire, Flatpak apps with no Open and Save dialog, stuck snap updates and old snap versions eating disk space.
 - Screens & monitors: why does my second monitor stay black? A monitor switched off in settings, a cable that doesn't pass the monitor's details, a DisplayLink dock without its driver, a Thunderbolt dock waiting for approval.
 - Touchpad: why doesn't it move the pointer? A touchpad Linux doesn't see at all, or one the desktop switched off (by a key, or while a mouse is plugged in).
+- USB drives & Windows disks: why won't it open, or why is it read-only? A missing NTFS or exFAT driver, an NTFS drive Windows Fast Startup left marked as in use, a stick that is plugged in but not mounted.
 - Printers: why can't I print? A stopped printing service, a printer CUPS paused after an error, jobs stuck in the queue, a network printer that is ready but not added yet.
 - Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain.
 - Disks & storage: is my disk full or failing? Free space and the cleanups that work on your distro, a disk switched to read-only, drive health (SMART) without root.

@@ -346,6 +346,10 @@ var packages = map[string]map[string]string{
 		"apt": "linux-firmware", "dnf": "linux-firmware", "pacman": "linux-firmware",
 		"zypper": "kernel-firmware", "apk": "linux-firmware", "xbps": "linux-firmware",
 	},
+	"exfat": {
+		"apt": "exfat-fuse", "dnf": "fuse-exfat", "pacman": "exfatprogs",
+		"zypper": "fuse-exfat", "apk": "fuse-exfat", "xbps": "fuse-exfat",
+	},
 }
 
 func installFix(h *doctor.Host, need string) doctor.Fix {
