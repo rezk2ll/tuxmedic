@@ -59,6 +59,39 @@ func TestStaleArch(t *testing.T) {
 	})
 }
 
+func TestEndOfLife(t *testing.T) {
+	ubuntuCSV := "version,codename,series,created,release,eol,eol-server,eol-esm\n" +
+		"22.04 LTS,Jammy Jellyfish,jammy,2021-10-14,2022-04-21,2027-06-01,2027-06-01,2032-04-09\n" +
+		"24.10,Oracular Oriole,oracular,2024-04-25,2024-10-10,2025-07-10\n"
+	debianCSV := "version,codename,series,created,release,eol,eol-lts,eol-elts\n" +
+		"11,Bullseye,bullseye,2019-07-06,2021-08-14,2024-08-14,2026-08-31,2031-06-30\n"
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	fake := func(osr string) *sys.Fake {
+		return &sys.Fake{Clock: now, Files: files("/etc/os-release", osr,
+			"/usr/share/distro-info/ubuntu.csv", ubuntuCSV, "/usr/share/distro-info/debian.csv", debianCSV)}
+	}
+
+	fs := endOfLife(fake("ID=ubuntu\nVERSION_CODENAME=oracular\nUBUNTU_CODENAME=oracular\n"))
+	if len(fs) != 1 || fs[0].Status != doctor.Warn || fs[0].Title != "Ubuntu 24.10 (Oracular Oriole) no longer gets security updates" {
+		t.Fatalf("interim = %+v", fs)
+	}
+	if fs := endOfLife(fake("ID=linuxmint\nUBUNTU_CODENAME=jammy\n")); len(fs) != 0 {
+		t.Errorf("supported LTS base: %+v", fs)
+	}
+	fs = endOfLife(fake("ID=debian\nVERSION_CODENAME=bullseye\n"))
+	if len(fs) != 1 || fs[0].Status != doctor.Warn {
+		t.Errorf("debian past LTS = %+v", fs)
+	}
+	if fs := endOfLife(fake("ID=fedora\nVERSION_ID=44\n")); len(fs) != 0 {
+		t.Errorf("fedora: %+v", fs)
+	}
+	future := fake("ID=ubuntu\nUBUNTU_CODENAME=jammy\n")
+	future.Clock = time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC)
+	if fs := endOfLife(future); len(fs) != 1 || fs[0].Status != doctor.Info || !strings.Contains(fs[0].Explain, "Ubuntu Pro") {
+		t.Errorf("LTS in ESM = %+v", fs)
+	}
+}
+
 func TestFlathubOff(t *testing.T) {
 	q := "flatpak remotes --columns=name,options"
 	h := &doctor.Host{ID: "fedora", PackageMgr: "dnf"}

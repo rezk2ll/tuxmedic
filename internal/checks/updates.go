@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ var Updates = doctor.Check{
 }
 
 func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
-	var fs []doctor.Finding
+	fs := endOfLife(s)
 
 	modules := "/usr/lib/modules"
 	if !s.Exists(modules) {
@@ -88,6 +89,68 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 
 // stagedDeployment reports whether rpm-ostree has a newer deployment than the
 // booted one, which it lists first, and its version as " (41.20261030.0)".
+// endOfLife reads the release dates distro-info-data ships on Ubuntu,
+// Debian and their derivatives, so no date is hard-coded here. Mint,
+// elementary and Pop!_OS follow the Ubuntu release in UBUNTU_CODENAME.
+func endOfLife(s sys.System) []doctor.Finding {
+	osr, err := s.ReadFile("/etc/os-release")
+	if err != nil {
+		return nil
+	}
+	kv := parseKV(string(osr))
+	table, series, name := "ubuntu", kv["UBUNTU_CODENAME"], "Ubuntu"
+	if series == "" {
+		if kv["ID"] != "debian" {
+			return nil
+		}
+		table, series, name = "debian", kv["VERSION_CODENAME"], "Debian"
+	}
+	csv, err := s.ReadFile("/usr/share/distro-info/" + table + ".csv")
+	if err != nil || series == "" {
+		return nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(csv)), "\n")
+	cols := strings.Split(lines[0], ",")
+	for _, l := range lines[1:] {
+		row := strings.Split(l, ",")
+		if len(row) < 6 || row[2] != series {
+			continue
+		}
+		get := func(col string) time.Time {
+			if i := slices.Index(cols, col); i >= 0 && i < len(row) {
+				t, _ := time.Parse("2006-01-02", row[i])
+				return t
+			}
+			return time.Time{}
+		}
+		end, extended, extName := get("eol"), get("eol-esm"), "Ubuntu Pro (free for personal use)"
+		if table == "debian" {
+			extended, extName = get("eol-lts"), "Debian LTS"
+		}
+		now := s.Now()
+		if end.IsZero() || now.Before(end) {
+			return nil
+		}
+		release := name + " " + row[0] + " (" + row[1] + ")"
+		f := doctor.Finding{
+			Status: doctor.Warn,
+			Title:  release + " no longer gets security updates",
+			Explain: "Its support ended on " + end.Format("2 January 2006") + ". Security holes found since then stay open, and new apps " +
+				"and drivers increasingly don't install. Upgrading to a newer release keeps your files and apps.",
+			Fixes:    []doctor.Fix{{Title: "Upgrade to the next release", URL: map[string]string{"ubuntu": "https://help.ubuntu.com/community/UpgradeNotes", "debian": "https://www.debian.org/releases/"}[table]}},
+			Evidence: []string{"/usr/share/distro-info/" + table + ".csv: " + l},
+		}
+		if now.Before(extended) {
+			f.Status = doctor.Info
+			f.Title = release + " is past its normal support"
+			f.Explain = "Its regular updates ended on " + end.Format("2 January 2006") + ". " + extName + " keeps it patched until " +
+				extended.Format("2 January 2006") + ", but plan the upgrade to a newer release before then."
+		}
+		return []doctor.Finding{f}
+	}
+	return nil
+}
+
 // flathubOff catches a Flatpak setup where Flathub, where nearly all
 // Flatpak apps live, is missing, switched off, or filtered down to a short
 // list (Fedora's default before it opened up).
