@@ -189,6 +189,42 @@ func TestNetwork(t *testing.T) {
 		f := &sys.Fake{Files: wifi, Reachable: map[string]bool{"1.1.1.1:443": true}, Resolvable: map[string]bool{"debian.org": true}}
 		expect(t, run(t, Network, f, laptop), doctor.OK, "You're online")
 	})
+	v6 := func(extra ...string) map[string]string {
+		m := map[string]string{
+			// A documentation-range address and a link-local one on the same card.
+			"/proc/net/if_inet6": "20010db8000000000000000000000042 03 40 00 00     wlp2s0\n" +
+				"fe800000000000000000000000000042 03 40 20 80     wlp2s0\n",
+			"/proc/net/ipv6_route": "00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 00000400 00000001 00000000 00000003   wlp2s0\n",
+		}
+		for k, v := range wifi {
+			m[k] = v
+		}
+		for i := 0; i+1 < len(extra); i += 2 {
+			m[extra[i]] = extra[i+1]
+		}
+		return m
+	}
+	nm := &doctor.Host{Laptop: true, PackageMgr: "dnf", Network: "NetworkManager"}
+	t.Run("ipv6 handed out but not routed", func(t *testing.T) {
+		f := &sys.Fake{Files: v6(), Reachable: map[string]bool{probeAddrs[0]: true}, Resolvable: map[string]bool{"debian.org": true}}
+		r := run(t, Network, f, nm)
+		expect(t, r, doctor.Warn, "IPv6 is set up on wlp2s0 but doesn't reach the internet")
+		if c := r.Findings[0].Fixes[1].Command; !strings.Contains(c, "ipv6.method disabled && nmcli device reapply wlp2s0") {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("ipv6 works", func(t *testing.T) {
+		f := &sys.Fake{Files: v6(), Reachable: map[string]bool{probeAddrs[0]: true, probeAddrs6[1]: true}, Resolvable: map[string]bool{"debian.org": true}}
+		expect(t, run(t, Network, f, nm), doctor.OK, "You're online")
+	})
+	t.Run("only a unique local ipv6 address", func(t *testing.T) {
+		f := &sys.Fake{
+			Files:      v6("/proc/net/if_inet6", "fd000000000000000000000000000042 03 40 00 00     wlp2s0\n"),
+			Reachable:  map[string]bool{probeAddrs[0]: true},
+			Resolvable: map[string]bool{"debian.org": true},
+		}
+		expect(t, run(t, Network, f, nm), doctor.OK, "You're online")
+	})
 	t.Run("dns broken", func(t *testing.T) {
 		f := &sys.Fake{Files: wifi, Reachable: map[string]bool{"9.9.9.9:443": true}}
 		expect(t, run(t, Network, f, laptop), doctor.Fail, "DNS")

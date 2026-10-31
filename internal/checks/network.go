@@ -25,6 +25,56 @@ var Network = doctor.Check{
 var probeAddrs = []string{"1.1.1.1:443", "9.9.9.9:443"}
 var probeHosts = []string{"debian.org", "kernel.org"}
 
+var probeAddrs6 = []string{"[2606:4700:4700::1111]:443", "[2620:fe::fe]:443"}
+
+// ipv6Route returns the interface with a public IPv6 address and an IPv6
+// default route, or "". Unique local addresses (fc00::/7) don't reach the
+// internet, and rejecting routes on lo aren't real ones.
+func ipv6Route(s sys.System) string {
+	public := map[string]bool{}
+	for _, l := range strings.Split(readTrim(s, "/proc/net/if_inet6"), "\n") {
+		f := strings.Fields(l)
+		if len(f) == 6 && f[3] == "00" && !strings.HasPrefix(f[0], "fc") && !strings.HasPrefix(f[0], "fd") {
+			public[f[5]] = true
+		}
+	}
+	for _, l := range strings.Split(readTrim(s, "/proc/net/ipv6_route"), "\n") {
+		f := strings.Fields(l)
+		if len(f) == 10 && f[0] == strings.Repeat("0", 32) && f[1] == "00" && f[9] != "lo" && public[f[9]] {
+			return f[9]
+		}
+	}
+	return ""
+}
+
+// brokenIPv6 catches a network that hands out IPv6 but doesn't route it.
+// Apps try IPv6 first, so every site stalls for seconds before loading.
+func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
+	dev := ipv6Route(s)
+	if dev == "" {
+		return nil
+	}
+	for _, a := range probeAddrs6 {
+		if s.Dial(ctx, a) == nil {
+			return nil
+		}
+	}
+	f := &doctor.Finding{
+		Status: doctor.Warn,
+		Title:  "IPv6 is set up on " + dev + " but doesn't reach the internet",
+		Explain: "Your network gives this computer an IPv6 address, but connections over it go nowhere. Browsers and apps try IPv6 first, " +
+			"so sites can take several seconds to start loading, and some apps fail. It's usually the router or the provider.",
+		Fixes: []doctor.Fix{{Title: "Restart the router"}},
+	}
+	if h.Network == "NetworkManager" {
+		f.Fixes = append(f.Fixes, doctor.Fix{
+			Title:   "If it keeps happening, turn IPv6 off for this network only",
+			Command: "nmcli connection modify \"$(nmcli -g GENERAL.CONNECTION device show " + dev + ")\" ipv6.method disabled && nmcli device reapply " + dev,
+		})
+	}
+	return f
+}
+
 type iface struct {
 	name     string
 	wireless bool
@@ -105,6 +155,9 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 
 	switch {
 	case online && resolves:
+		if b := brokenIPv6(ctx, s, h); b != nil {
+			fs = append(fs, *b)
+		}
 		f := doctor.Finding{Status: doctor.OK, Title: "You're online"}
 		if w := wifiSignal(s); w != nil {
 			if w.Status == doctor.OK {
