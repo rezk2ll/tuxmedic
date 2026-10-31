@@ -78,6 +78,7 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	if h.PackageMgr == "pacman" {
 		fs = append(fs, staleArch(s, h)...)
 	}
+	fs = append(fs, flathubOff(ctx, s)...)
 
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "No pending restart and the package manager is healthy"})
@@ -87,6 +88,54 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 
 // stagedDeployment reports whether rpm-ostree has a newer deployment than the
 // booted one, which it lists first, and its version as " (41.20261030.0)".
+// flathubOff catches a Flatpak setup where Flathub, where nearly all
+// Flatpak apps live, is missing, switched off, or filtered down to a short
+// list (Fedora's default before it opened up).
+func flathubOff(ctx context.Context, s sys.System) []doctor.Finding {
+	if !s.Has("flatpak") {
+		return nil
+	}
+	out, err := s.Run(ctx, "flatpak", "remotes", "--columns=name,options")
+	if err != nil {
+		return nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var opts []string
+	found := false
+	for _, l := range lines {
+		name, o, _ := strings.Cut(l, "\t")
+		if name != "flathub" {
+			continue
+		}
+		found = true
+		if !strings.Contains(o, "disabled") && !strings.Contains(o, "filtered") {
+			return nil
+		}
+		opts = append(opts, o)
+	}
+	const add = "flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
+	if !found {
+		if len(lines) == 0 || lines[0] == "" {
+			return nil
+		}
+		return []doctor.Finding{{
+			Status:   doctor.Info,
+			Title:    "Flatpak is set up without Flathub, where most Flatpak apps are",
+			Explain:  "Your software center only shows apps from the sources listed below. Flathub has thousands more, including many popular apps.",
+			Fixes:    []doctor.Fix{{Title: "Add Flathub", Command: add}},
+			Evidence: lines,
+		}}
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Flathub is switched off or limited to a short list of apps",
+		Explain: "Flathub is where most Flatpak apps are, but here it's disabled or filtered, so your software center " +
+			"shows only a few of them and some apps you look for aren't there.",
+		Fixes:    []doctor.Fix{{Title: "Turn on all of Flathub", Command: "sudo flatpak remote-modify --enable --no-filter flathub", NeedsRoot: true}},
+		Evidence: []string{"flathub: " + strings.Join(opts, "; ")},
+	}}
+}
+
 // staleArch catches an Arch system that hasn't had a full upgrade in months.
 // Its keyring is then older than the keys that signed today's packages, and
 // the next upgrade fails with "signature is unknown trust".

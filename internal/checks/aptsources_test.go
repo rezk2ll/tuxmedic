@@ -59,6 +59,22 @@ func TestStaleArch(t *testing.T) {
 	})
 }
 
+func TestFlathubOff(t *testing.T) {
+	q := "flatpak remotes --columns=name,options"
+	h := &doctor.Host{ID: "fedora", PackageMgr: "dnf"}
+	fake := func(out string) *sys.Fake { return &sys.Fake{Commands: map[string]string{q: out}} }
+
+	expect(t, run(t, Updates, fake("fedora\tsystem,oci\nflathub\tsystem,filtered\n"), h), doctor.Info, "Flathub is switched off or limited")
+	expect(t, run(t, Updates, fake("flathub\tsystem,disabled\n"), h), doctor.Info, "Flathub is switched off or limited")
+	r := run(t, Updates, fake("fedora\tsystem,oci\n"), h)
+	expect(t, r, doctor.Info, "Flatpak is set up without Flathub")
+	if c := r.Findings[0].Fixes[0].Command; c != "flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo" {
+		t.Errorf("fix = %q", c)
+	}
+	expect(t, run(t, Updates, fake("flathub\tsystem,filtered\nflathub\tuser\n"), h), doctor.OK, "healthy")
+	expect(t, run(t, Updates, fake(""), h), doctor.OK, "healthy")
+}
+
 func TestDeadAptSources(t *testing.T) {
 	h := &doctor.Host{ID: "ubuntu", PackageMgr: "apt"}
 	f := func(extra map[string]string) *sys.Fake {
