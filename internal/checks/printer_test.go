@@ -22,6 +22,7 @@ func cups(p, o string, extra map[string]string) *sys.Fake {
 func TestPrinter(t *testing.T) {
 	h := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Systemd: true}
 	idle := "printer Office is idle.  enabled since Thu 30 Oct 2026 10:00:00 AM UTC\n"
+	idle2 := "printer Label is idle.  enabled since Thu 30 Oct 2026 10:00:00 AM UTC\n"
 
 	t.Run("ready", func(t *testing.T) {
 		expect(t, run(t, Printer, cups(idle, "", nil), h), doctor.OK, "Ready to print: Office")
@@ -32,6 +33,13 @@ func TestPrinter(t *testing.T) {
 		expect(t, r, doctor.Warn, "The printer Office is paused with 2 print jobs waiting")
 		if r.Findings[0].Fixes[0].Command != "sudo cupsenable Office" {
 			t.Errorf("fix = %q", r.Findings[0].Fixes[0].Command)
+		}
+	})
+	t.Run("paused by a failed driver", func(t *testing.T) {
+		r := run(t, Printer, cups("printer Office disabled since Thu 30 Oct 2026 10:00:00 AM UTC -\n\tFilter failed\n"+idle2, "", nil), h)
+		expect(t, r, doctor.Warn, "The printer Office is paused because its driver failed")
+		if f := r.Findings[0]; len(f.Fixes) != 2 || f.Evidence[0] != "CUPS: Filter failed" {
+			t.Errorf("finding = %+v", f)
 		}
 	})
 	t.Run("stuck job", func(t *testing.T) {

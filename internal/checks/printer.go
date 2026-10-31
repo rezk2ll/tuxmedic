@@ -20,6 +20,7 @@ var Printer = doctor.Check{
 
 type printer struct {
 	name, state string // idle, printing, disabled
+	reason      string // CUPS's last message, the indented line under it
 }
 
 func runPrinter(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
@@ -90,6 +91,16 @@ func runPrinter(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 				Explain: "CUPS pauses a printer after an error, like the printer being off or out of reach when you printed. It stays paused until someone resumes it, even after the problem is gone.",
 				Fixes:   []doctor.Fix{{Title: "Resume it", Command: "sudo cupsenable " + p.name, NeedsRoot: true}},
 			}
+			if strings.Contains(p.reason, "Filter failed") {
+				f.Title = "The printer " + p.name + " is paused because its driver failed"
+				f.Explain = "CUPS paused it because the driver couldn't turn your document into something the printer understands. " +
+					"Resuming alone sends the next job into the same failure. This is usually an old or wrong driver; most printers made in " +
+					"the last ten years print without one."
+				f.Fixes = append(f.Fixes, doctor.Fix{Title: "Remove the printer and add it again, choosing the driverless option (IPP Everywhere) if your printer settings offer it"})
+			}
+			if p.reason != "" {
+				f.Evidence = []string{"CUPS: " + p.reason}
+			}
 			if n > 0 {
 				f.Title += fmt.Sprintf(" with %s waiting", plural(n, "print job", "print jobs"))
 			}
@@ -139,6 +150,12 @@ func parsePrinters(out string) []printer {
 	var ps []printer
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
+		if len(ps) > 0 && len(f) > 0 && (line[0] == '\t' || line[0] == ' ') {
+			if ps[len(ps)-1].reason == "" {
+				ps[len(ps)-1].reason = strings.TrimSpace(line)
+			}
+			continue
+		}
 		if len(f) < 3 || f[0] != "printer" {
 			continue
 		}
