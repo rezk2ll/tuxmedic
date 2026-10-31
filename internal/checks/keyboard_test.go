@@ -33,6 +33,17 @@ func TestKeyboard(t *testing.T) {
 			t.Errorf("fix = %q", c)
 		}
 	})
+	t.Run("mac keyboard with media keys first", func(t *testing.T) {
+		dev := "/sys/bus/hid/drivers/apple/0003:05AC:024F.0003/uevent"
+		mode := "/sys/module/hid_apple/parameters/fnmode"
+		r := run(t, Keyboard, &sys.Fake{Files: files(dev, "", mode, "1\n")}, &doctor.Host{})
+		expect(t, r, doctor.Info, "F1 to F12 change volume and brightness")
+		if c := r.Findings[0].Fixes[1].Command; c != "echo 'options hid_apple fnmode=2' | sudo tee /etc/modprobe.d/hid_apple.conf" {
+			t.Errorf("fix = %q", c)
+		}
+		expect(t, run(t, Keyboard, &sys.Fake{Files: files(dev, "", mode, "3\n")}, &doctor.Host{}), doctor.OK, "Nothing is slowing down")
+		expect(t, run(t, Keyboard, &sys.Fake{Files: files(mode, "1\n")}, &doctor.Host{}), doctor.OK, "Nothing is slowing down")
+	})
 	t.Run("not on GNOME, gsettings is not asked", func(t *testing.T) {
 		f := &sys.Fake{Commands: map[string]string{"gsettings get org.gnome.desktop.a11y.keyboard slowkeys-enable": "true\n"}}
 		expect(t, run(t, Keyboard, f, plasma), doctor.OK, "Nothing is slowing down")

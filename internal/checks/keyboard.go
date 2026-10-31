@@ -16,12 +16,33 @@ var Keyboard = doctor.Check{
 	Run:      runKeyboard,
 }
 
+// appleFnKeys catches hid_apple's fnmode=1, which makes F1 to F12 change
+// volume and brightness unless Fn is held. Keychron and other Mac-layout
+// keyboards use this driver too. The default (3) already gives non-Apple
+// keyboards their F keys, so only an explicit 1 is reported.
+func appleFnKeys(s sys.System) []doctor.Finding {
+	if devs, _ := s.Glob("/sys/bus/hid/drivers/apple/0*"); len(devs) == 0 || readTrim(s, "/sys/module/hid_apple/parameters/fnmode") != "1" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Info,
+		Title:   "F1 to F12 change volume and brightness unless you hold Fn",
+		Explain: "Your keyboard uses the Mac keyboard driver, which is set to put the media keys first, as on a Mac. If you want the F keys first, switch the order.",
+		Fixes: []doctor.Fix{
+			{Title: "Put the F keys first until the next restart", Command: "echo 2 | sudo tee /sys/module/hid_apple/parameters/fnmode", NeedsRoot: true},
+			{Title: "Keep it after restarts", Command: "echo 'options hid_apple fnmode=2' | sudo tee /etc/modprobe.d/hid_apple.conf", NeedsRoot: true},
+		},
+		Evidence: []string{"hid_apple fnmode=1"},
+	}}
+}
+
 func runKeyboard(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	var fs []doctor.Finding
 	if strings.Contains(strings.ToLower(h.Desktop), "gnome") && s.Has("gsettings") {
 		fs = append(fs, accessKeys(ctx, s)...)
 	}
 	fs = append(fs, inputMethod(s, h)...)
+	fs = append(fs, appleFnKeys(s)...)
 	if len(fs) == 0 {
 		return []doctor.Finding{{Status: doctor.OK, Title: "Nothing is slowing down or blocking your typing"}}
 	}
