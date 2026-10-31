@@ -24,6 +24,7 @@ func runCamera(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findi
 	fs = append(fs, cameras(s, h)...)
 	fs = append(fs, privacySwitches(ctx, s, h)...)
 	fs = append(fs, microphone(ctx, s)...)
+	fs = append(fs, flatpakCameraDenied(ctx, s)...)
 	return fs
 }
 
@@ -135,6 +136,40 @@ func privacySwitches(ctx context.Context, s sys.System, h *doctor.Host) []doctor
 		})
 	}
 	return fs
+}
+
+// flatpakCameraDenied catches Flatpak apps refused the camera once: the
+// portal remembers the answer and never asks again, so the app just sees
+// no camera. Lines are "devices<TAB>camera<TAB>app<TAB>yes|no<TAB>data".
+func flatpakCameraDenied(ctx context.Context, s sys.System) []doctor.Finding {
+	if !s.Has("flatpak") {
+		return nil
+	}
+	out, err := s.Run(ctx, "flatpak", "permissions", "devices", "camera")
+	if err != nil {
+		return nil
+	}
+	var names, cmds []string
+	for _, l := range strings.Split(string(out), "\n") {
+		f := strings.Split(l, "\t")
+		if len(f) < 4 || f[0] != "devices" || f[1] != "camera" || strings.TrimSpace(f[3]) != "no" {
+			continue
+		}
+		names = append(names, desktopAppName(s, f[2]+".desktop"))
+		cmds = append(cmds, "flatpak permission-set devices camera "+f[2]+" yes")
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Warn,
+		Title:   joinAnd(names) + " can't use the camera: access was refused before",
+		Explain: "Flatpak apps ask before using the camera, and the answer is remembered. After a \"Deny\", the app is never asked again and just finds no camera.",
+		Fixes: []doctor.Fix{
+			{Title: "Allow it again", Command: strings.Join(cmds, " && ")},
+			{Title: "Or allow it in Settings, under Apps, then the app's permissions"},
+		},
+	}}
 }
 
 func microphone(ctx context.Context, s sys.System) []doctor.Finding {

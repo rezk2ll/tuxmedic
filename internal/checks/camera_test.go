@@ -50,6 +50,16 @@ func TestCamera(t *testing.T) {
 			t.Errorf("fix = %q", c)
 		}
 	})
+	t.Run("flatpak app refused the camera", func(t *testing.T) {
+		f := camFake(webcam(), micOn, micName)
+		f.Files["/var/lib/flatpak/exports/share/applications/com.example.Meet.desktop"] = "[Desktop Entry]\nName=Meet\n"
+		f.Commands["flatpak permissions devices camera"] = "devices\tcamera\tcom.example.Meet\tno\t0x00\ndevices\tcamera\torg.gnome.Snapshot\tyes\t0x00\n"
+		r := run(t, Camera, f, laptop)
+		expect(t, r, doctor.Warn, "Meet can't use the camera: access was refused before")
+		if c := r.Findings[0].Fixes[0].Command; c != "flatpak permission-set devices camera com.example.Meet yes" {
+			t.Errorf("fix = %q", c)
+		}
+	})
 	t.Run("camera held by another app", func(t *testing.T) {
 		f := camFake(webcam(), micOn, micName)
 		f.Files["/proc/4242/comm"] = "zoom\n"
