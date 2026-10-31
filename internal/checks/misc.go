@@ -120,12 +120,21 @@ func runBluetooth(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 	}
 	if s.Has("bluetoothctl") {
 		if out, err := s.Run(ctx, "bluetoothctl", "show"); err == nil && strings.Contains(string(out), "Powered: no") {
-			return []doctor.Finding{{
+			f := doctor.Finding{
 				Status:  doctor.Fail,
 				Title:   "Bluetooth is off",
 				Explain: "The adapter is powered down, so nothing can pair or connect.",
 				Fixes:   []doctor.Fix{{Title: "Turn it on", Command: "bluetoothctl power on"}},
-			}}
+			}
+			if btAutoEnableOff(s) {
+				f.Explain += " It's also set to start switched off, so it will be off again after the next restart."
+				f.Fixes = append(f.Fixes, doctor.Fix{
+					Title:     "Turn it on at every startup",
+					Command:   `sudo sed -i 's/^\s*AutoEnable\s*=.*/AutoEnable=true/' /etc/bluetooth/main.conf`,
+					NeedsRoot: true,
+				})
+			}
+			return []doctor.Finding{f}
 		}
 	}
 	return []doctor.Finding{{Status: doctor.OK, Title: "Bluetooth is on and ready"}}
@@ -134,6 +143,23 @@ func runBluetooth(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fi
 // btFirmware looks in this boot's kernel log for a Bluetooth chip whose
 // firmware didn't load, or that stopped answering. The adapter still shows
 // up in both cases, but nothing pairs.
+// btAutoEnableOff reports AutoEnable=false under [Policy] in BlueZ's
+// config, which leaves the adapter off at every boot.
+func btAutoEnableOff(s sys.System) bool {
+	section := ""
+	for _, l := range strings.Split(readTrim(s, "/etc/bluetooth/main.conf"), "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "[") {
+			section = l
+			continue
+		}
+		if k, v, ok := strings.Cut(l, "="); ok && section == "[Policy]" && strings.TrimSpace(k) == "AutoEnable" {
+			return strings.EqualFold(strings.TrimSpace(v), "false")
+		}
+	}
+	return false
+}
+
 func btFirmware(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
 	es, err := journal(ctx, s, "-b", "-k", "-p", "0..4")
 	if err != nil {

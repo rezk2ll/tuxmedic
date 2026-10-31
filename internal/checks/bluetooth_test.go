@@ -29,6 +29,20 @@ func TestBluetooth(t *testing.T) {
 		}
 	}
 
+	t.Run("off, and set to start off", func(t *testing.T) {
+		f := fake(kernelLog("usb 3-1: new device"))
+		f.Commands["bluetoothctl show"] = "Controller 00:00:00:00:00:01\n\tPowered: no\n"
+		f.Files["/etc/bluetooth/main.conf"] = "[General]\n#AutoEnable=true\n[Policy]\nAutoEnable = false\n"
+		r := run(t, Bluetooth, f, h)
+		expect(t, r, doctor.Fail, "Bluetooth is off")
+		if fx := r.Findings[0].Fixes; len(fx) != 2 || fx[1].Title != "Turn it on at every startup" {
+			t.Errorf("fixes = %+v", fx)
+		}
+		f.Files["/etc/bluetooth/main.conf"] = "[Policy]\nAutoEnable=true\n"
+		if fx := run(t, Bluetooth, f, h).Findings[0].Fixes; len(fx) != 1 {
+			t.Errorf("AutoEnable=true still offers the startup fix: %+v", fx)
+		}
+	})
 	t.Run("ready", func(t *testing.T) {
 		expect(t, run(t, Bluetooth, fake(kernelLog("usb 3-1: new device")), h), doctor.OK, "Bluetooth is on and ready")
 	})
