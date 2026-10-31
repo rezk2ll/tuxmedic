@@ -48,8 +48,6 @@ In the interactive screen, press a number to open a check and run one of its fix
 - Games and Steam, virtual machines and containers, Flatpak and snap apps
 - Notifications, the clock, fonts, permissions
 
-![A check with its fixes and the log lines behind it](docs/detail.png)
-
 ## Requirements
 
 - Any distro. CI runs it on Ubuntu, Debian, Fedora, Arch, openSUSE, Alpine and Void.
