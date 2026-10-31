@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -81,6 +82,20 @@ var firmwareRE = regexp.MustCompile(`Direct firmware load for (\S+) failed|firmw
 func runDrivers(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	var fs []doctor.Finding
 	devs := pciDevices(s)
+	// Installers offer nomodeset as "safe graphics"; left in place, the
+	// screen runs without a driver: low resolution, no brightness keys, no
+	// second monitor, and a slow desktop.
+	nomodeset := h.Virtual == "" && slices.Contains(strings.Fields(readTrim(s, "/proc/cmdline")), "nomodeset")
+	if nomodeset {
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Warn,
+			Title:  "The graphics driver is switched off by the nomodeset startup setting",
+			Explain: "nomodeset is meant as a one-time way to get a picture when the driver fails, and installers offer it as \"safe graphics\". " +
+				"Left on, the screen runs without its driver: a low resolution, brightness keys and second monitors that don't work, and a slow desktop.",
+			Fixes:    []doctor.Fix{kernelArgRemoveFix(s, h, "nomodeset")},
+			Evidence: []string{"/proc/cmdline contains nomodeset"},
+		})
+	}
 
 	var gpus []pciDev
 	for _, d := range devs {
@@ -94,8 +109,8 @@ func runDrivers(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		if d.driver != "" {
 			continue
 		}
-		if d.vendor == "0x10de" && k == "graphics card" {
-			continue // reported with the NVIDIA diagnosis below
+		if d.vendor == "0x10de" && k == "graphics card" || nomodeset && k == "graphics card" {
+			continue // reported with the NVIDIA or nomodeset diagnosis
 		}
 		fs = append(fs, missingDriver(d, h))
 	}
