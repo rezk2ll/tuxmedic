@@ -28,6 +28,7 @@ type DiskUsage struct {
 type System interface {
 	ReadFile(path string) ([]byte, error)
 	Glob(pattern string) ([]string, error)
+	Readlink(path string) (string, error)
 	// Run executes a command with the C locale so its output parses the same on
 	// every system language.
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -54,6 +55,8 @@ func (Host) ReadFile(path string) ([]byte, error) {
 }
 
 func (Host) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
+
+func (Host) Readlink(path string) (string, error) { return os.Readlink(path) }
 
 func (Host) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	path, err := exec.LookPath(name)

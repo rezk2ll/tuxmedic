@@ -12,7 +12,9 @@ import (
 // Fake replays a machine from in-memory files and canned command output.
 // Commands are keyed by their full command line, e.g. "wpctl status".
 type Fake struct {
-	Files    map[string]string
+	Files map[string]string
+	// Links are symlinks and their targets; Glob matches them like files.
+	Links    map[string]string
 	Commands map[string]string
 	// Failing commands return their output (if any in Commands) plus this error.
 	Failing map[string]error
@@ -46,9 +48,23 @@ func (f *Fake) ReadFile(path string) ([]byte, error) {
 	return nil, fmt.Errorf("%s: %w", path, ErrNotFound)
 }
 
+func (f *Fake) Readlink(path string) (string, error) {
+	if t, ok := f.Links[path]; ok {
+		return t, nil
+	}
+	return "", fmt.Errorf("%s: %w", path, ErrNotFound)
+}
+
 func (f *Fake) Glob(pattern string) ([]string, error) {
 	seen := map[string]bool{}
+	paths := make([]string, 0, len(f.Files)+len(f.Links))
 	for p := range f.Files {
+		paths = append(paths, p)
+	}
+	for p := range f.Links {
+		paths = append(paths, p)
+	}
+	for _, p := range paths {
 		for c := p; c != "/" && c != "."; c = filepath.Dir(c) {
 			if ok, _ := filepath.Match(pattern, c); ok {
 				seen[c] = true
