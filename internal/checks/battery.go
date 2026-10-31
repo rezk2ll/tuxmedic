@@ -47,7 +47,7 @@ func powerSupplies(s sys.System) []supply {
 	return out
 }
 
-func runBattery(_ context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+func runBattery(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	var bats []supply
 	var chargers []supply
 	for _, p := range powerSupplies(s) {
@@ -93,7 +93,62 @@ func runBattery(_ context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 	for _, b := range bats {
 		fs = append(fs, batteryFindings(b, pluggedIn, watts, len(chargers) > 0)...)
 	}
-	return fs
+	return append(fs, powerManagers(ctx, s, h)...)
+}
+
+var powerTools = []struct{ unit, name string }{
+	{"power-profiles-daemon.service", "power-profiles-daemon (your desktop's power mode setting)"},
+	{"tlp.service", "TLP"},
+	{"auto-cpufreq.service", "auto-cpufreq"},
+	{"tuned.service", "TuneD"},
+}
+
+// powerManagers catches two power tools fighting over the same settings:
+// each undoes the other's changes, so battery life gets worse, not better.
+func powerManagers(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if !h.Systemd || !s.Has("systemctl") {
+		return nil
+	}
+	args := []string{"is-active"}
+	for _, p := range powerTools {
+		args = append(args, p.unit)
+	}
+	out, _ := s.Run(ctx, "systemctl", args...)
+	states := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var on []int
+	for i := range powerTools {
+		if i < len(states) && strings.TrimSpace(states[i]) == "active" {
+			on = append(on, i)
+		}
+	}
+	if len(on) < 2 {
+		return nil
+	}
+	var names, ev []string
+	var fixes []doctor.Fix
+	for _, keep := range on {
+		names = append(names, powerTools[keep].name)
+		ev = append(ev, powerTools[keep].unit+": active")
+		var off []string
+		for _, o := range on {
+			if o != keep {
+				off = append(off, powerTools[o].unit)
+			}
+		}
+		fixes = append(fixes, doctor.Fix{
+			Title:     "Keep only " + strings.SplitN(powerTools[keep].name, " (", 2)[0],
+			Command:   "sudo systemctl disable --now " + strings.Join(off, " "),
+			NeedsRoot: true,
+		})
+	}
+	return []doctor.Finding{{
+		Status: doctor.Warn,
+		Title:  "Two power-saving tools are fighting each other",
+		Explain: "These all change the same processor and device power settings, and each undoes what the other did: " + strings.Join(names, ", ") +
+			". Battery life usually gets worse, and the power mode in settings may not stick. Keep one.",
+		Fixes:    fixes,
+		Evidence: ev,
+	}}
 }
 
 func batteryFindings(b supply, pluggedIn bool, watts float64, canSeeCharger bool) []doctor.Finding {

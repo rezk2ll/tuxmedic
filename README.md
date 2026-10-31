@@ -32,7 +32,7 @@ Each check answers a question people actually ask:
 - Fingerprint reader: why can't I log in with my finger? fprintd missing, a reader Linux has no driver for (with its USB ID to look up), no finger saved yet, or a saved finger that sudo never asks for.
 - USB drives & Windows disks: why won't it open, or why is it read-only? A missing NTFS or exFAT driver, an NTFS drive Windows Fast Startup left marked as in use, a stick that is plugged in but not mounted.
 - Printers: why can't I print? A stopped printing service, a printer CUPS paused after an error, jobs stuck in the queue, a network printer that is ready but not added yet.
-- Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain.
+- Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain, two power-saving tools (TLP, auto-cpufreq, TuneD, the desktop's own) undoing each other.
 - Disks & storage: is my disk full or failing? Free space and the cleanups that work on your distro, a disk switched to read-only, drive health (SMART) without root, an SSD that never gets TRIM.
 - Drivers & graphics: is some hardware missing a driver? NVIDIA with Secure Boot, Broadcom Wi-Fi, missing firmware.
 - Video playback: why do videos stutter and the fans spin up? No VA-API driver for your Intel, AMD or NVIDIA graphics, so the processor decodes every frame, and the H.264 and HEVC codecs Fedora and openSUSE leave out.
