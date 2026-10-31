@@ -97,6 +97,48 @@ func slowBand(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding
 	return nil
 }
 
+// slowAdapters only do 100 Mb/s, or report a made-up speed (phone
+// tethering), so a low speed says nothing about the cable.
+var slowAdapters = map[string]bool{
+	"smsc95xx": true, "asix": true, "dm9601": true, "mcs7830": true, "sr9700": true,
+	"cdc_ether": true, "rndis_host": true, "ipheth": true, "cdc_ncm": true,
+}
+
+// slowEthernet catches a wired link that came up at 10 or 100 Mb/s. Gigabit
+// needs all four wire pairs; with one damaged, the link silently drops to
+// 100 Mb/s.
+func slowEthernet(s sys.System, ifs []iface) []doctor.Finding {
+	var fs []doctor.Finding
+	for _, i := range ifs {
+		d := "/sys/class/net/" + i.name
+		if i.wireless || !i.carrier || !s.Exists(d+"/device") {
+			continue
+		}
+		drv := parseKV(readTrim(s, d+"/device/uevent"))["DRIVER"]
+		speed := readTrim(s, d+"/speed")
+		half := readTrim(s, d+"/duplex") == "half"
+		if slowAdapters[drv] || speed != "10" && speed != "100" && !half {
+			continue
+		}
+		title := "The cable connection runs at only " + speed + " Mb/s"
+		if half {
+			title = "The cable connection runs in half duplex, which is slow and drops packets"
+		}
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Info,
+			Title:  title,
+			Explain: "Your network card can do 1000 Mb/s or more. A link this slow usually means a damaged or very old cable, " +
+				"a loose plug, or an old router or switch port.",
+			Fixes: []doctor.Fix{
+				{Title: "Try another cable (Cat 5e or newer) and another port on the router"},
+				{Title: "See what the card and the other end agreed on", Command: "ethtool " + i.name},
+			},
+			Evidence: []string{i.name + ": speed " + speed + " Mb/s, duplex " + readTrim(s, d+"/duplex") + ", driver " + drv},
+		})
+	}
+	return fs
+}
+
 // brokenIPv6 catches a network that hands out IPv6 but doesn't route it.
 // Apps try IPv6 first, so every site stalls for seconds before loading.
 func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Finding {
@@ -211,6 +253,7 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		if b := slowBand(ctx, s, h); b != nil {
 			fs = append(fs, *b)
 		}
+		fs = append(fs, slowEthernet(s, ifs)...)
 		f := doctor.Finding{Status: doctor.OK, Title: "You're online"}
 		if w := wifiSignal(s); w != nil {
 			if w.Status == doctor.OK {
