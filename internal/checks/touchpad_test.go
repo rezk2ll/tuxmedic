@@ -56,6 +56,18 @@ func TestTouchpad(t *testing.T) {
 		}
 		expect(t, run(t, Touchpad, f, laptop), doctor.Info, "tap to click is off")
 	})
+	t.Run("turned off in KDE", func(t *testing.T) {
+		const q = "busctl --user get-property org.kde.KWin /org/kde/KWin/InputDevice/event5 org.kde.KWin.InputDevice enabled"
+		f := &sys.Fake{Files: map[string]string{"/proc/bus/input/devices": inputs}, Commands: map[string]string{q: "b false\n"}}
+		kde := &doctor.Host{Laptop: true, Desktop: "KDE", Session: "wayland"}
+		r := run(t, Touchpad, f, kde)
+		expect(t, r, doctor.Fail, "The touchpad is turned off in your settings")
+		if c := r.Findings[0].Fixes[1].Command; c != "busctl --user set-property org.kde.KWin /org/kde/KWin/InputDevice/event5 org.kde.KWin.InputDevice enabled b true" {
+			t.Errorf("fix = %q", c)
+		}
+		f.Commands[q] = "b true\n"
+		expect(t, run(t, Touchpad, f, kde), doctor.OK, "Touchpad found")
+	})
 	t.Run("desktop", func(t *testing.T) {
 		expect(t, run(t, Touchpad, &sys.Fake{}, &doctor.Host{}), doctor.Skipped, "Only laptops")
 	})

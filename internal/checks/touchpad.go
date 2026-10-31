@@ -30,6 +30,50 @@ func inputNames(s sys.System) []string {
 	return names
 }
 
+// inputEvent finds the eventN handler of the input device called name, which
+// is the sysName KWin uses in its D-Bus path for that device.
+func inputEvent(s sys.System, name string) string {
+	b, _ := s.ReadFile("/proc/bus/input/devices")
+	for _, block := range strings.Split(string(b), "\n\n") {
+		if !strings.Contains(block, `N: Name="`+name+`"`) {
+			continue
+		}
+		for _, l := range strings.Split(block, "\n") {
+			if h, ok := strings.CutPrefix(l, "H: Handlers="); ok {
+				for _, f := range strings.Fields(h) {
+					if strings.HasPrefix(f, "event") {
+						return f
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// kdeTouchpadOff asks KWin whether it ignores the touchpad. KWin only owns
+// the input devices in a Wayland session.
+func kdeTouchpadOff(ctx context.Context, s sys.System, h *doctor.Host, pad string) []doctor.Finding {
+	ev := inputEvent(s, pad)
+	if h.Session != "wayland" || !strings.Contains(strings.ToLower(h.Desktop), "kde") || ev == "" || !s.Has("busctl") {
+		return nil
+	}
+	path := "/org/kde/KWin/InputDevice/" + ev
+	out, err := s.Run(ctx, "busctl", "--user", "get-property", "org.kde.KWin", path, "org.kde.KWin.InputDevice", "enabled")
+	if err != nil || strings.TrimSpace(string(out)) != "b false" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Fail,
+		Title:   "The touchpad is turned off in your settings",
+		Explain: "The touchpad works, but Plasma ignores it. A touchpad key on the keyboard can switch this by accident.",
+		Fixes: []doctor.Fix{
+			{Title: "Turn it on in System Settings, under Mouse & Touchpad, Touchpad"},
+			{Title: "Or turn it on from here", Command: "busctl --user set-property org.kde.KWin " + path + " org.kde.KWin.InputDevice enabled b true"},
+		},
+	}}
+}
+
 func runTouchpad(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	if !h.Laptop {
 		return []doctor.Finding{{Status: doctor.Skipped, Title: "Only laptops have a built-in touchpad"}}
@@ -61,6 +105,9 @@ func runTouchpad(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fin
 		}}
 	}
 
+	if fs := kdeTouchpadOff(ctx, s, h, pad); len(fs) > 0 {
+		return fs
+	}
 	if s.Has("gsettings") && strings.Contains(strings.ToLower(h.Desktop), "gnome") {
 		out, _ := s.Run(ctx, "gsettings", "get", "org.gnome.desktop.peripherals.touchpad", "send-events")
 		switch strings.Trim(strings.TrimSpace(string(out)), "'") {
