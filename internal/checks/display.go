@@ -146,12 +146,8 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	}}
 }
 
-// lowRefresh catches a fast monitor left at 60 Hz, the default many
-// desktops pick, at its current resolution. On X11 it asks xrandr and on
-// KDE Wayland kscreen-doctor; under other Wayland desktops xrandr only
-// sees XWayland's made-up modes.
-// nightLight answers "why does my screen look yellow": GNOME's Night Light
-// is tinting it right now.
+// nightLight answers "why does my screen look yellow": the desktop's Night
+// Light is tinting it right now.
 func nightLight(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	d := strings.ToLower(h.Desktop)
 	if !s.Has("busctl") {
@@ -189,6 +185,10 @@ func nightLight(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	}}
 }
 
+// lowRefresh catches a fast monitor left at 60 Hz, the default many
+// desktops pick, at its current resolution. On X11 it asks xrandr and on
+// KDE Wayland kscreen-doctor; under other Wayland desktops xrandr only
+// sees XWayland's made-up modes.
 func lowRefresh(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	if h.Session == "wayland" && strings.Contains(strings.ToLower(h.Desktop), "kde") && s.Has("kscreen-doctor") {
 		return lowRefreshKDE(ctx, s)
