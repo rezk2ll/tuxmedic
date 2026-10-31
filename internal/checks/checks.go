@@ -30,7 +30,7 @@ var keywords = map[string]string{
 	"camera": "camera webcam cam mic microphone video zoom teams meet skype discord call calls record recording " +
 		"voice hear",
 	"display": "monitor monitors screen screens display displays external second hdmi displayport usbc dock " +
-		"thunderbolt projector tv resolution black blank detected flicker flickering",
+		"thunderbolt projector tv resolution black blank detected flicker flickering brightness backlight dim dark",
 	"touchpad": "touchpad trackpad pointer cursor click clicking tap scroll scrolling gestures",
 	"printer":  "printer printers print printing printed scanner cups paper job jobs queue hp epson canon brother",
 	"drives": "usb stick flash pendrive thumb external drive drives sd card reader ntfs exfat fat32 readonly " +

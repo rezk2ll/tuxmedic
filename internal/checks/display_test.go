@@ -66,6 +66,53 @@ func TestDisplay(t *testing.T) {
 	}
 }
 
+func TestBrightness(t *testing.T) {
+	laptop := &doctor.Host{ID: "ubuntu", PackageMgr: "apt", Laptop: true}
+	bl := "/sys/class/backlight/intel_backlight/"
+
+	t.Run("no control", func(t *testing.T) {
+		f := screens(nil)
+		f.Commands = map[string]string{"update-grub --version": ""}
+		r := run(t, Display, f, laptop)
+		expect(t, r, doctor.Warn, "The screen brightness can't be changed")
+		want := `sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/&acpi_backlight=native /' /etc/default/grub && sudo update-grub`
+		if got := r.Findings[0].Fixes[0].Command; got != want {
+			t.Errorf("fix = %q", got)
+		}
+	})
+	t.Run("turned all the way down", func(t *testing.T) {
+		f := screens(map[string]string{bl + "brightness": "12\n", bl + "max_brightness": "19393\n"})
+		expect(t, run(t, Display, f, laptop), doctor.Info, "almost at zero")
+	})
+	t.Run("fine", func(t *testing.T) {
+		f := screens(map[string]string{bl + "brightness": "9000\n", bl + "max_brightness": "19393\n"})
+		expect(t, run(t, Display, f, laptop), doctor.OK, "Screens in use")
+	})
+	t.Run("desktop with a monitor only", func(t *testing.T) {
+		expect(t, run(t, Display, screens(nil), nil), doctor.OK, "Screens in use")
+	})
+}
+
+func TestKernelArgFix(t *testing.T) {
+	tests := []struct {
+		h    *doctor.Host
+		f    *sys.Fake
+		want string
+	}{
+		{&doctor.Host{PackageMgr: "rpm-ostree"}, &sys.Fake{}, "sudo rpm-ostree kargs --append=x=1"},
+		{&doctor.Host{PackageMgr: "dnf"}, &sys.Fake{Commands: map[string]string{"grubby --info": ""}}, "sudo grubby --update-kernel=ALL --args=x=1"},
+		{&doctor.Host{PackageMgr: "apt"}, &sys.Fake{Commands: map[string]string{"kernelstub --help": "", "update-grub --help": ""}}, "sudo kernelstub -a x=1"},
+	}
+	for _, tc := range tests {
+		if got := kernelArgFix(tc.f, tc.h, "x=1").Command; got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.h.PackageMgr, got, tc.want)
+		}
+	}
+	if f := kernelArgFix(&sys.Fake{}, &doctor.Host{PackageMgr: "nix"}, "x=1"); f.Command != "" {
+		t.Errorf("nix should get instructions, not a command: %+v", f)
+	}
+}
+
 func TestDisplayInContainer(t *testing.T) {
 	r := run(t, Display, &sys.Fake{}, &doctor.Host{Container: true})
 	expect(t, r, doctor.Skipped, "No screens to check")

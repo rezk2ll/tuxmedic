@@ -139,6 +139,9 @@ func runDisplay(_ context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 
 	fs = append(fs, displayLink(s)...)
 	fs = append(fs, thunderbolt(s)...)
+	if h.Laptop && h.Virtual == "" && !h.Container {
+		fs = append(fs, backlight(s, h, conns)...)
+	}
 
 	if len(active) > 0 {
 		fs = append(fs, doctor.Finding{
