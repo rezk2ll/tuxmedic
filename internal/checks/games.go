@@ -96,6 +96,28 @@ func runGames(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		})
 	}
 
+	// Proton's esync needs one file handle per sync object; under 524288
+	// (systemd's default hard limit since v240) games stutter or quit.
+	if b, err := s.ReadFile("/proc/self/limits"); err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			if f := strings.Fields(l); len(f) >= 5 && strings.HasPrefix(l, "Max open files") {
+				if hard, err := strconv.Atoi(f[4]); err == nil && hard < 524288 {
+					fs = append(fs, doctor.Finding{
+						Status: doctor.Info,
+						Title:  "Some Windows games may stutter or quit: the open file limit is low",
+						Explain: fmt.Sprintf("Proton's esync, which many games rely on, keeps a file open for every lock it uses. Your session allows only %d, "+
+							"where most distros now allow 524288 or more.", hard),
+						Fixes: []doctor.Fix{
+							{Title: "Raise it, then restart the computer", Command: "sudo mkdir -p /etc/systemd/system.conf.d && printf '[Manager]\\nDefaultLimitNOFILE=1024:524288\\n' | sudo tee /etc/systemd/system.conf.d/90-nofile.conf", NeedsRoot: true},
+							{Title: "Or turn esync off for a game: add PROTON_NO_ESYNC=1 %command% to its launch options"},
+						},
+						Evidence: []string{strings.Join(strings.Fields(l), " ")},
+					})
+				}
+			}
+		}
+	}
+
 	if len(fs) == 0 {
 		how := "Steam"
 		if flat && !native {

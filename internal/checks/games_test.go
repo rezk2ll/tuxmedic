@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -67,6 +68,20 @@ func TestGames(t *testing.T) {
 			t.Errorf("evidence = %v", r.Findings[0].Evidence)
 		}
 		expect(t, run(t, Games, &sys.Fake{Files: with(rules, "/proc/sys/vm/max_map_count", "1048576\n"), Commands: flatSteam}, apt),
+			doctor.OK, "Steam (Flatpak) has the drivers it needs")
+	})
+	t.Run("low open file limit", func(t *testing.T) {
+		rules := with(amd, "/usr/lib/udev/rules.d/60-steam-input.rules", "")
+		limits := func(hard string) string {
+			return "Limit                     Soft Limit           Hard Limit           Units\n" +
+				"Max open files            1024                 " + hard + "                 files\n"
+		}
+		r := run(t, Games, &sys.Fake{Files: with(rules, "/proc/self/limits", limits("4096")), Commands: flatSteam}, apt)
+		expect(t, r, doctor.Info, "the open file limit is low")
+		if c := r.Findings[0].Fixes[0].Command; !strings.Contains(c, "DefaultLimitNOFILE=1024:524288") {
+			t.Errorf("fix = %q", c)
+		}
+		expect(t, run(t, Games, &sys.Fake{Files: with(rules, "/proc/self/limits", limits("524288")), Commands: flatSteam}, apt),
 			doctor.OK, "Steam (Flatpak) has the drivers it needs")
 	})
 	t.Run("nvidia beats the integrated gpu", func(t *testing.T) {
