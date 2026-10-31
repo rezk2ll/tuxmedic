@@ -21,4 +21,11 @@ tuxmedic report >"$out/report.md"
 [ "$?" -le 1 ] || { echo "smoke: report failed"; exit 1; }
 grep -q "tuxmedic report" "$out/report.md" || { echo "smoke: report is empty"; exit 1; }
 
+tuxmedic watch --for 5s >"$out/watch.txt" 2>&1
+[ "$?" -le 1 ] || { cat "$out/watch.txt"; echo "smoke: watch failed"; exit 1; }
+grep -q "of watching\|dropped" "$out/watch.txt" || { cat "$out/watch.txt"; echo "smoke: watch printed no summary"; exit 1; }
+
+tuxmedic ask "my wifi keeps dropping" >"$out/ask.txt" 2>&1
+[ "$?" -le 1 ] || { cat "$out/ask.txt"; echo "smoke: ask failed"; exit 1; }
+
 echo "smoke: ok"
