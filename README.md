@@ -15,7 +15,7 @@ Find out what's wrong with your Linux computer, and how to fix it.
 
 The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
 
-tuxmedic asks them for you. It runs 23 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+tuxmedic asks them for you. It runs 24 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
 
 ## What it checks
 
@@ -27,6 +27,7 @@ Each check answers a question people actually ask:
 - Camera & microphone: why don't they work in video calls? Another app holding the camera, the GNOME privacy switches, a muted or silent microphone, apps recording the speakers instead of the mic, Intel IPU laptop cameras that need extra drivers.
 - Screen sharing & app sandbox: why is my shared screen black on Wayland? A missing or crashed desktop portal, no PipeWire, Flatpak apps with no Open and Save dialog, stuck snap updates and old snap versions eating disk space.
 - Screens & monitors: why does my second monitor stay black? A monitor switched off in settings, a cable that doesn't pass the monitor's details, a DisplayLink dock without its driver, a Thunderbolt dock waiting for approval, a laptop screen whose brightness can't be changed (with the kernel setting that fixes it, for your boot loader).
+- Keyboard & typing: why do keys type late or not at all? Slow Keys or Sticky Keys switched on by holding Shift, and input methods for other languages (IBus, Fcitx) that apps expect but aren't running, or that run twice.
 - Touchpad: why doesn't it move the pointer? A touchpad Linux doesn't see at all, or one the desktop switched off (by a key, or while a mouse is plugged in).
 - Fingerprint reader: why can't I log in with my finger? fprintd missing, a reader Linux has no driver for (with its USB ID to look up), no finger saved yet.
 - USB drives & Windows disks: why won't it open, or why is it read-only? A missing NTFS or exFAT driver, an NTFS drive Windows Fast Startup left marked as in use, a stick that is plugged in but not mounted.
