@@ -45,7 +45,7 @@ var keywords = map[string]string{
 	"games": "game games gaming steam proton vulkan controller gamepad joystick xbox playstation dualsense " +
 		"wine lutris heroic",
 	"thermal": "hot heat heating overheat overheating temperature temperatures temp fan fans loud noisy noise " +
-		"throttling throttle cpu",
+		"throttling throttle cpu slow sluggish laggy speed ghz mhz frequency turbo boost",
 	"drivers": "driver drivers nvidia amd radeon intel graphics gpu nouveau firmware secure secureboot broadcom " +
 		"missing games gaming steam",
 	"sleep":     "sleep suspend suspended wake waking wakeup resume lid hibernate standby",

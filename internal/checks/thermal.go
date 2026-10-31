@@ -135,7 +135,67 @@ func runThermal(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 			Explain: "Some throttling under heavy load is normal. If it happens while you're doing light work, the cooling isn't keeping up.",
 		})
 	}
+	if f, ok := cappedCPU(s); ok {
+		fs = append(fs, f)
+	}
 	return fs
+}
+
+// cappedCPU catches a processor held well below its top speed by a
+// setting, not by heat: a power tool's battery limit, intel_pstate's
+// max_perf_pct, or a limit the firmware sets when the charger is too weak.
+func cappedCPU(s sys.System) (doctor.Finding, bool) {
+	var limit, top float64
+	var bios bool
+	policies, _ := s.Glob("/sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq")
+	for _, p := range policies {
+		dir := filepath.Dir(p)
+		m, ok1 := milli(s, p)
+		c, ok2 := milli(s, dir+"/cpuinfo_max_freq")
+		if !ok1 || !ok2 || c <= 0 {
+			continue
+		}
+		if b, ok := milli(s, dir+"/bios_limit"); ok && b > 0 && b < m {
+			m, bios = b, true
+		}
+		if top == 0 || m/c < limit/top {
+			limit, top = m, c
+		}
+	}
+	pct := 100.0
+	if top > 0 {
+		pct = limit / top * 100
+	}
+	if v, err := strconv.Atoi(readTrim(s, "/sys/devices/system/cpu/intel_pstate/max_perf_pct")); err == nil && float64(v) < pct {
+		pct, bios = float64(v), false
+		limit = top * pct / 100
+	}
+	if top == 0 || pct >= 70 {
+		return doctor.Finding{}, false
+	}
+	ghz := func(mhz float64) string { return strconv.FormatFloat(mhz/1000, 'f', 1, 64) + " GHz" }
+	f := doctor.Finding{
+		Status: doctor.Warn,
+		Title:  fmt.Sprintf("The processor is held at %s, %.0f%% of its %s top speed", ghz(limit), pct, ghz(top)),
+		Explain: "This is a setting, not heat. Power-saving tools such as TLP or auto-cpufreq can set a lower top speed, often only on battery, " +
+			"and everything feels slow. Undo it in the tool that set it.",
+		Fixes: []doctor.Fix{
+			{Title: "Look for a speed limit in TLP's settings (CPU_SCALING_MAX_FREQ, CPU_MAX_PERF)", Command: "grep -rE '^CPU_(SCALING_MAX_FREQ|MAX_PERF)' /etc/tlp.conf /etc/tlp.d/"},
+			{Title: "Look for a speed limit in auto-cpufreq's settings", Command: "grep -E '^scaling_max_freq' /etc/auto-cpufreq.conf"},
+		},
+		Evidence: []string{fmt.Sprintf("top speed allowed: %.0f MHz of %.0f MHz", limit, top)},
+	}
+	switch {
+	case readTrim(s, "/sys/devices/system/cpu/cpufreq/boost") == "0":
+		f.Fixes = append([]doctor.Fix{{Title: "Turn turbo boost back on (until restart)", Command: "echo 1 | sudo tee /sys/devices/system/cpu/cpufreq/boost", NeedsRoot: true}}, f.Fixes...)
+	case readTrim(s, "/sys/devices/system/cpu/intel_pstate/no_turbo") == "1":
+		f.Fixes = append([]doctor.Fix{{Title: "Turn turbo boost back on (until restart)", Command: "echo 0 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo", NeedsRoot: true}}, f.Fixes...)
+	}
+	if bios {
+		f.Explain = "The computer's firmware set this limit. Laptops do it when the charger is too weak or not the original one, or when the battery is very worn."
+		f.Fixes = []doctor.Fix{{Title: "Use the charger that came with the laptop, then restart"}, {Title: "Install firmware (BIOS) updates", Command: "fwupdmgr get-updates"}}
+	}
+	return f, true
 }
 
 func hotFixes() []doctor.Fix {
