@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -187,10 +188,51 @@ func runSleep(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 			Fixes:   []doctor.Fix{{Title: "Try deep sleep until the next restart", Command: "echo deep | sudo tee /sys/power/mem_sleep", NeedsRoot: true}},
 		})
 	}
+	if h.Laptop {
+		fs = append(fs, lidSwitch(s, h)...)
+	}
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Sleep worked every time since startup"})
 	}
 	return fs
+}
+
+// lidSwitch reads logind's lid setting the way logind does: main files, then
+// drop-ins, the last one wins. KDE's PowerDevil takes the lid over from
+// logind and follows its own settings, so KDE is left out.
+func lidSwitch(s sys.System, h *doctor.Host) []doctor.Finding {
+	if strings.Contains(strings.ToLower(h.Desktop), "kde") {
+		return nil
+	}
+	files := []string{"/usr/lib/systemd/logind.conf", "/etc/systemd/logind.conf"}
+	for _, d := range []string{"/usr/lib/systemd/logind.conf.d", "/run/systemd/logind.conf.d", "/etc/systemd/logind.conf.d"} {
+		ds, _ := s.Glob(d + "/*.conf")
+		sort.Strings(ds)
+		files = append(files, ds...)
+	}
+	action, from := "", ""
+	for _, f := range files {
+		for _, line := range strings.Split(readTrim(s, f), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "HandleLidSwitch="); ok {
+				action, from = strings.TrimSpace(v), f
+			}
+		}
+	}
+	if action != "ignore" && action != "lock" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Closing the lid doesn't put the laptop to sleep",
+		Explain: "The login manager is set to " + map[string]string{"ignore": "do nothing", "lock": "only lock the screen"}[action] + " when the lid closes, so the laptop stays on in your bag and drains the battery. " +
+			"Someone may have set it on purpose, for example to use the laptop closed with a monitor; logind already stays awake when a monitor is plugged in.",
+		Fixes: []doctor.Fix{{
+			Title:     "Sleep when the lid closes (applies after a restart)",
+			Command:   "sudo mkdir -p /etc/systemd/logind.conf.d && printf '[Login]\\nHandleLidSwitch=suspend\\n' | sudo tee /etc/systemd/logind.conf.d/90-lid.conf",
+			NeedsRoot: true,
+		}},
+		Evidence: []string{from + ": HandleLidSwitch=" + action},
+	}}
 }
 
 func atoi(s string) int {
