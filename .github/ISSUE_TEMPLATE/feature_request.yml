@@ -1,0 +1,16 @@
+name: New check or feature
+description: A problem tuxmedic should recognise, or something it could do better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: why
+    attributes:
+      label: The problem
+      description: What went wrong on your computer, and how you found the cause in the end. Logs or commands that showed it help a lot.
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro and desktop
+      description: "e.g. Fedora 43, GNOME on Wayland"

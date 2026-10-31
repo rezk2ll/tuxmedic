@@ -1,0 +1,31 @@
+name: Bug report
+description: tuxmedic crashed, missed a problem, or reported one that isn't there
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What tuxmedic said, and what is actually going on with your computer.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: "Run `tuxmedic report` and paste the output. Names and addresses are removed, but read it before posting."
+      render: markdown
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tuxmedic version
+      description: "Output of `tuxmedic version`"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: "Only for display problems: the terminal app, and whether you use tmux, screen or SSH."

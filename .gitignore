@@ -1,0 +1,5 @@
+/tuxmedic
+/dist/
+*.test
+*.out
+tuxmedic-report-*.md

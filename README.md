@@ -1,0 +1,99 @@
+<div align="center">
+
+# tuxmedic
+
+Find out what's wrong with your Linux computer, and how to fix it.
+
+[![CI](https://github.com/rezk2ll/tuxmedic/actions/workflows/ci.yml/badge.svg)](https://github.com/rezk2ll/tuxmedic/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/rezk2ll/tuxmedic)](https://github.com/rezk2ll/tuxmedic/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/rezk2ll/tuxmedic)](go.mod)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
+![tuxmedic overview](docs/overview.png)
+
+</div>
+
+The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
+
+tuxmedic asks them for you. It runs 13 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+
+## What it checks
+
+Each check answers a question people actually ask:
+
+- Crashes & freezes: why did my computer crash, freeze or restart by itself? It reads the previous sessions' logs and names the cause: out of memory, graphics card hang, kernel panic, overheating.
+- Internet & Wi-Fi: why can't I get online? It tells apart airplane mode, a router with no internet, broken DNS and hotel sign-in pages, and notices a connection that keeps dropping.
+- Sound: why is there no sound? Muted output, the wrong default device, a monitor with no HDMI profile, a Bluetooth headset stuck in call quality, missing firmware.
+- Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain.
+- Disks & storage: is my disk full or failing? Free space and the cleanups that work on your distro, a disk switched to read-only, drive health (SMART) without root.
+- Drivers & graphics: is some hardware missing a driver? NVIDIA with Secure Boot, Broadcom Wi-Fi, missing firmware.
+- Also: sleep and wake, memory and swap, temperatures and fans, pending updates and stuck package managers, slow startup and failed services, the clock, Bluetooth.
+
+![A check with its fixes and the log lines behind it](docs/detail.png)
+
+## Install
+
+Download the latest release and check it against the signed checksums:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rezk2ll/tuxmedic/main/install.sh | sh
+```
+
+Or grab a package for your distro from the [releases page](https://github.com/rezk2ll/tuxmedic/releases/latest): `.deb`, `.rpm`, `.apk`, Arch `.pkg.tar.zst`, or a plain static binary for amd64, arm64 and riscv64.
+
+With Go 1.26 or newer:
+
+```sh
+go install github.com/rezk2ll/tuxmedic/cmd/tuxmedic@latest
+```
+
+## Use
+
+```sh
+tuxmedic             # the interactive screen
+tuxmedic check       # print the results, for scripts and pipes
+tuxmedic check sound battery
+tuxmedic report      # a Markdown report to paste on a forum
+tuxmedic check --json
+```
+
+In the interactive screen, press a number to open a check, then a number to run or copy one of its fixes. `e` shows the log lines a finding is based on, `/` filters checks, `ctrl+p` lists every command, and `?` shows all the keys. The mouse works too.
+
+`tuxmedic check` exits with 1 when it finds a problem, so it works in scripts.
+
+## Requirements
+
+- Any Linux distro. CI installs and runs it on Ubuntu, Debian, Fedora, Arch, openSUSE, Alpine and Void. Checks that need systemd say so and step aside on systems without it.
+- Any terminal, from 40×10 up. On the Linux console (`TERM=linux`) or with `--ascii`, it uses plain ASCII. When the output isn't a terminal, it prints plain text.
+- No root. Run it as yourself. To see past crashes, your user needs to read the system log: many distros allow that already, otherwise tuxmedic tells you which group to join. `sudo tuxmedic` adds a few checks that need root, such as SMART on drives UDisks can't read.
+
+## Privacy
+
+tuxmedic only reads. It changes nothing unless you pick a fix and press Enter, and then it runs the command it showed you in your terminal. It sends nothing anywhere. The only network traffic is a connection test to 1.1.1.1 and 9.9.9.9 and a DNS lookup of debian.org and kernel.org.
+
+`tuxmedic report` removes your host name, user name, home folder, MAC and IP addresses, emails, UUIDs and device serial numbers, so you can post it publicly. Read it before posting anyway.
+
+## Build from source
+
+```sh
+git clone https://github.com/rezk2ll/tuxmedic
+cd tuxmedic
+go build ./cmd/tuxmedic
+./tuxmedic
+```
+
+## How it works
+
+Every check is a small function that reads `/proc`, `/sys`, the systemd journal, and tools such as `pactl`, `nmcli`, `busctl` and `systemctl` when they're installed. Checks read the machine through one interface, so the tests can replay a broken machine from fake files and command output. That's how the crash, battery, network and disk logic is tested without a broken laptop.
+
+Checks run in parallel and the screen shows each result as it arrives. A check that hits something unexpected reports itself as skipped instead of taking the program down.
+
+Why a terminal app and not a window: when the desktop is the thing that's broken, a terminal still works. It also works over SSH, in a text console, on any desktop, and on a friend's computer you're fixing for them.
+
+## License
+
+[GPL-3.0](LICENSE)
+
+## Contributing
+
+Found a problem tuxmedic missed, or a wrong diagnosis? [Open an issue](https://github.com/rezk2ll/tuxmedic/issues/new/choose) with the output of `tuxmedic report`. To add a check or fix one for your distro, see [CONTRIBUTING.md](CONTRIBUTING.md).

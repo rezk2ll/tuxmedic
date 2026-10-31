@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: tuxmedic
+
+builds:
+  - main: ./cmd/tuxmedic
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64, riscv64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+nfpms:
+  - package_name: tuxmedic
+    file_name_template: "{{ .ConventionalFileName }}"
+    homepage: https://github.com/rezk2ll/tuxmedic
+    maintainer: rezk2ll <6764881+rezk2ll@users.noreply.github.com>
+    description: |-
+      Finds out what is wrong with your Linux computer and how to fix it.
+      tuxmedic checks crashes, Wi-Fi, sound, battery, disks, drivers, sleep,
+      memory, temperatures, updates and startup, and explains each problem in
+      plain language with the exact fix for your distro.
+    license: GPL-3.0-or-later
+    section: utils
+    formats: [deb, rpm, apk, archlinux]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/licenses/tuxmedic/LICENSE
+    archlinux:
+      packager: rezk2ll <6764881+rezk2ll@users.noreply.github.com>
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
+    artifacts: checksum
+
+changelog:
+  use: github
+  filters:
+    exclude:
+      - "^chore\\(deps\\)"
+      - "^Merge "
+
+release:
+  prerelease: auto
+  footer: |
+    Verify the download: `cosign verify-blob --bundle checksums.txt.sigstore.json --certificate-identity-regexp 'https://github.com/rezk2ll/tuxmedic/' --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt`, then `sha256sum --ignore-missing -c checksums.txt`.
