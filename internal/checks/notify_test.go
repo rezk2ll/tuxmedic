@@ -26,6 +26,11 @@ func TestNotifications(t *testing.T) {
 	r := run(t, Notifications, muted, gnome)
 	expect(t, r, doctor.Info, "Notifications are switched off for Slack and firefox_firefox")
 
+	kde := &doctor.Host{Desktop: "KDE", Session: "wayland"}
+	kdeDND := &sys.Fake{Commands: map[string]string{bus: owned,
+		"busctl --user get-property org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications Inhibited": "b true\n"}}
+	expect(t, run(t, Notifications, kdeDND, kde), doctor.Info, "Plasma is holding notifications back")
+
 	sway := &doctor.Host{Desktop: "sway", Session: "wayland", PackageMgr: "pacman"}
 	r = run(t, Notifications, &sys.Fake{Commands: map[string]string{bus: "org.freedesktop.DBus 1 systemd user - - - -\n"}}, sway)
 	expect(t, r, doctor.Warn, "Nothing on your desktop shows notifications")

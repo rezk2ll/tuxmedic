@@ -50,6 +50,17 @@ func runNotifications(ctx context.Context, s sys.System, h *doctor.Host) []docto
 		}
 		fs = append(fs, mutedApps(ctx, s)...)
 	}
+	if strings.Contains(strings.ToLower(h.Desktop), "kde") && s.Has("busctl") {
+		out, _ := s.Run(ctx, "busctl", "--user", "get-property", notifyName, "/org/freedesktop/Notifications", notifyName, "Inhibited")
+		if strings.TrimSpace(string(out)) == "b true" {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   "Plasma is holding notifications back",
+				Explain: "Notifications go to the notification history without popping up. Do Not Disturb is the usual reason; it stays on until you switch it off, or until the time you picked.",
+				Fixes:   []doctor.Fix{{Title: "Switch it off from the notifications icon in the panel"}},
+			})
+		}
+	}
 	if len(fs) == 0 {
 		return []doctor.Finding{{Status: doctor.OK, Title: "Notifications can be shown"}}
 	}
