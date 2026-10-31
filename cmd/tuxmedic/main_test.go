@@ -20,6 +20,7 @@ func TestCLI(t *testing.T) {
 		{args: []string{"frobnicate"}, code: 2, stderr: `unknown command "frobnicate"`},
 		{args: []string{"check", "nosuchcheck"}, code: 2, stderr: `no check called "nosuchcheck"`},
 		{args: []string{"--nope"}, code: 2, stderr: "Usage:"},
+		{args: []string{"ask"}, code: 2, stderr: "ask what?"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {

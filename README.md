@@ -54,13 +54,14 @@ go install github.com/rezk2ll/tuxmedic/cmd/tuxmedic@latest
 
 ```sh
 tuxmedic             # the interactive screen
+tuxmedic ask "zoom can't hear me"   # only the checks your problem is about
 tuxmedic check       # print the results, for scripts and pipes
 tuxmedic check sound battery
 tuxmedic report      # a Markdown report to paste on a forum
 tuxmedic check --json
 ```
 
-In the interactive screen, press a number to open a check, then a number to run or copy one of its fixes. `e` shows the log lines a finding is based on, `/` filters checks, `ctrl+p` lists every command, and `?` shows all the keys. The mouse works too.
+In the interactive screen, press a number to open a check, then a number to run or copy one of its fixes. `e` shows the log lines a finding is based on, `/` lets you describe the problem in your own words and keeps the checks it is about, `ctrl+p` lists every command, and `?` shows all the keys. The mouse works too.
 
 `tuxmedic check` exits with 1 when it finds a problem, so it works in scripts.
 

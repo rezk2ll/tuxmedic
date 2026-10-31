@@ -117,7 +117,7 @@ func New(s sys.System, h *doctor.Host, checks []doctor.Check, o Options) *Model 
 	m.theme = newTheme(true, o.ASCII)
 	m.filter = textinput.New()
 	m.filter.Prompt = "/ "
-	m.filter.Placeholder = "type to filter checks"
+	m.filter.Placeholder = "describe the problem, e.g. zoom can't hear me"
 	m.palInput = textinput.New()
 	m.palInput.Prompt = "> "
 	m.palInput.Placeholder = "type a command or a check name"
@@ -407,8 +407,7 @@ func (m *Model) rebuildEntries() {
 		m.entries = append(m.entries, entry{overview: true})
 	}
 	for i, c := range m.checks {
-		hay := strings.ToLower(c.Name + " " + c.Question + " " + c.Category + " " + c.ID)
-		if q == "" || fuzzy(hay, q) {
+		if q == "" || doctor.Score(c, q) > 0 {
 			m.entries = append(m.entries, entry{check: i})
 		}
 	}

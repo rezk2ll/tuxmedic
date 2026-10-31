@@ -29,6 +29,7 @@ const usage = `tuxmedic finds out what is wrong with your Linux computer and how
 
 Usage:
   tuxmedic                  open the interactive screen
+  tuxmedic ask QUESTION     check what your question is about, e.g. tuxmedic ask "no sound in zoom"
   tuxmedic check [CHECK…]   print the results (all checks, or the ones named)
   tuxmedic report           print a report to share on a forum, personal details removed
   tuxmedic list             list the checks
@@ -96,16 +97,36 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%-10s %s\n", c.ID, c.Question)
 		}
 		return 0
-	case "", "check", "report":
+	case "", "check", "report", "ask":
 	default:
 		fmt.Fprintf(stderr, "tuxmedic: unknown command %q\n\n%s", cmd, usage)
 		return 2
 	}
 
-	selected, err := pick(all, rest)
-	if err != nil {
-		fmt.Fprintf(stderr, "tuxmedic: %v\nRun \"tuxmedic list\" to see the checks.\n", err)
-		return 2
+	var selected []doctor.Check
+	if cmd == "ask" {
+		q := strings.Join(rest, " ")
+		if strings.TrimSpace(q) == "" {
+			fmt.Fprint(stderr, "tuxmedic: ask what? For example: tuxmedic ask \"my wifi keeps dropping\"\n")
+			return 2
+		}
+		selected = doctor.Match(all, q)
+		if len(selected) == 0 {
+			fmt.Fprintln(stderr, "None of the checks are about that, so tuxmedic will run all of them.")
+			selected = all
+		} else if !*asJSON {
+			names := make([]string, len(selected))
+			for i, c := range selected {
+				names[i] = c.Name
+			}
+			fmt.Fprintf(stderr, "Checking: %s\n\n", strings.Join(names, ", "))
+		}
+	} else {
+		var err error
+		if selected, err = pick(all, rest); err != nil {
+			fmt.Fprintf(stderr, "tuxmedic: %v\nRun \"tuxmedic list\" to see the checks.\n", err)
+			return 2
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -117,7 +138,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if term == "linux" || os.Getenv("TUXMEDIC_ASCII") != "" {
 		*ascii = true
 	}
-	interactive := cmd == "" && !*plain && !*asJSON && isTTY(os.Stdin) && isTTY(os.Stdout) && term != "dumb"
+	interactive := (cmd == "" || cmd == "ask") && !*plain && !*asJSON && isTTY(os.Stdin) && isTTY(os.Stdout) && term != "dumb"
 
 	if interactive {
 		m := ui.New(s, h, selected, ui.Options{Version: versionString(), ASCII: *ascii})

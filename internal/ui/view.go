@@ -423,7 +423,7 @@ func (m *Model) renderFooter() string {
 		if m.current() == nil {
 			num = "open"
 		}
-		hs = []hint{{"↑↓", "move"}, {"enter", "open"}, {"1-9", num}, {"/", "filter"}, {"x", "share report"}, {"ctrl+p", "commands"}, {"?", "help"}, {"q", "quit"}}
+		hs = []hint{{"↑↓", "move"}, {"enter", "open"}, {"1-9", num}, {"/", "ask"}, {"x", "share report"}, {"ctrl+p", "commands"}, {"?", "help"}, {"q", "quit"}}
 	}
 	var parts []string
 	used := 1
@@ -497,7 +497,7 @@ func (m *Model) overlay() string {
 			{"1 to 9", "run or copy a fix; on the overview, open a check"},
 			{"e", "show the log lines behind a finding"},
 			{"r  /  R", "check this again  /  run every check again"},
-			{"/", "filter checks: try \"wifi\" or \"battery\""},
+			{"/", "describe the problem: try \"wifi keeps dropping\""},
 			{"x", "save a report to share (personal details removed)"},
 			{"ctrl+p  or  :", "every command, searchable"},
 			{"mouse", "click a check, scroll with the wheel"},

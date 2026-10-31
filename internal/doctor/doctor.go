@@ -66,6 +66,9 @@ type Check struct {
 	Category string
 	// Question is how a user would ask for this check, e.g. "Why is there no sound?".
 	Question string
+	// Keywords are words people use when describing this problem in their own
+	// terms ("zoom", "airpods", "hot"), lowercase and without hyphens.
+	Keywords []string
 	Run      func(ctx context.Context, s sys.System, h *Host) []Finding
 }
 
