@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -52,6 +53,33 @@ func TestVideo(t *testing.T) {
 	t.Run("unknown chip", func(t *testing.T) {
 		v, vu := card("0", "virtio_gpu")
 		expect(t, run(t, Video, fake(v, vu), ubuntu), doctor.Skipped, "No graphics chip")
+	})
+	fedora := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Desktop: "GNOME"}
+	codecs := func(rpmq string, extra ...string) *sys.Fake {
+		f := fake(append([]string{intel, intelUevent, "/usr/lib64/dri/iHD_drv_video.so", ""}, extra...)...)
+		f.Commands = map[string]string{"rpm -q ffmpeg-libs libavcodec-freeworld": rpmq}
+		return f
+	}
+	t.Run("fedora with ffmpeg-free only", func(t *testing.T) {
+		r := run(t, Video, codecs("package ffmpeg-libs is not installed\npackage libavcodec-freeworld is not installed\n"), fedora)
+		expect(t, r, doctor.Info, "Fedora leaves out the H.264 and HEVC codecs")
+		if c := r.Findings[0].Fixes[0].Command; !strings.HasPrefix(c, "sudo dnf install https://mirrors.rpmfusion.org/free/fedora/") {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("fedora with rpm fusion but no swap yet", func(t *testing.T) {
+		r := run(t, Video, codecs("package ffmpeg-libs is not installed\npackage libavcodec-freeworld is not installed\n",
+			"/etc/yum.repos.d/rpmfusion-free.repo", "[rpmfusion-free]\n"), fedora)
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo dnf swap ffmpeg-free ffmpeg --allowerasing" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("fedora with freeworld codecs", func(t *testing.T) {
+		r := run(t, Video, codecs("package ffmpeg-libs is not installed\nlibavcodec-freeworld-7.1.1-3.fc43.x86_64\n"), fedora)
+		expect(t, r, doctor.OK, "decoded by your Intel graphics")
+		if len(r.Findings) != 1 {
+			t.Errorf("findings = %+v", r.Findings)
+		}
 	})
 	t.Run("no desktop", func(t *testing.T) {
 		expect(t, run(t, Video, fake(intel, intelUevent), &doctor.Host{}), doctor.Skipped, "No desktop session")

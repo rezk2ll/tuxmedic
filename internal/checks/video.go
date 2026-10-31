@@ -36,6 +36,35 @@ func runVideo(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 	if h.Desktop == "" || h.Container {
 		return []doctor.Finding{{Status: doctor.Skipped, Title: "No desktop session, so no video playback to check"}}
 	}
+	return append(vaapi(s, h), fedoraCodecs(ctx, s, h)...)
+}
+
+// fedoraCodecs catches Fedora's ffmpeg-free, which leaves out H.264, HEVC
+// and AAC: many videos and streams then won't play outside Firefox.
+func fedoraCodecs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.ID != "fedora" || h.PackageMgr != "dnf" || !s.Has("rpm") {
+		return nil
+	}
+	out, _ := s.Run(ctx, "rpm", "-q", "ffmpeg-libs", "libavcodec-freeworld")
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if l != "" && !strings.Contains(l, "not installed") {
+			return nil
+		}
+	}
+	cmd := "sudo dnf swap ffmpeg-free ffmpeg --allowerasing"
+	if !s.Exists("/etc/yum.repos.d/rpmfusion-free.repo") {
+		cmd = "sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm && " + cmd
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Many videos won't play: Fedora leaves out the H.264 and HEVC codecs",
+		Explain: "For patent reasons Fedora ships a reduced ffmpeg. Videos from phones and cameras, many streams and some sites show an error " +
+			"or play without sound. The full ffmpeg comes from RPM Fusion, the repository most Fedora users add.",
+		Fixes: []doctor.Fix{{Title: "Add RPM Fusion and switch to the full ffmpeg", Command: cmd, NeedsRoot: true, URL: "https://rpmfusion.org/Howto/Multimedia"}},
+	}}
+}
+
+func vaapi(s sys.System, h *doctor.Host) []doctor.Finding {
 	have := map[string]bool{}
 	for _, pat := range []string{"/usr/lib/*-linux-gnu/dri*/*_drv_video.so", "/usr/lib*/dri*/*_drv_video.so"} {
 		fs, _ := s.Glob(pat)
