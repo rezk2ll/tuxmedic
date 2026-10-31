@@ -367,6 +367,7 @@ var packages = map[string]map[string]string{
 		"apt": "pipewire-audio", "dnf": "pipewire-pulseaudio", "pacman": "pipewire-pulse",
 		"zypper": "pipewire-pulseaudio", "apk": "pipewire-pulse", "xbps": "pipewire",
 	},
+	"gvfs-mtp": {"apt": "gvfs-backends", "zypper": "gvfs-backends"},
 	"libvirt": {
 		"apt": "libvirt-daemon-system", "dnf": "libvirt", "pacman": "libvirt",
 		"zypper": "libvirt", "apk": "libvirt-daemon", "xbps": "libvirt",

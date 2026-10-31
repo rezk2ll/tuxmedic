@@ -63,6 +63,49 @@ func writable(ctx context.Context, s sys.System, dir string) bool {
 	return err == nil
 }
 
+// phoneNoMTP catches a phone or camera offering its files over MTP while
+// the file manager lacks the part that reads MTP: gvfs-mtp for GNOME and
+// the desktops built on it, kio-extras for KDE.
+func phoneNoMTP(s sys.System, h *doctor.Host) *doctor.Finding {
+	if h.Desktop == "" {
+		return nil
+	}
+	ifs, _ := s.Glob("/sys/bus/usb/devices/*:*/interface")
+	phone := ""
+	for _, p := range ifs {
+		if readTrim(s, p) == "MTP" {
+			dev, _, _ := strings.Cut(strings.TrimSuffix(p, "/interface"), ":")
+			phone = firstNonEmpty(strings.TrimSpace(readTrim(s, dev+"/manufacturer")+" "+readTrim(s, dev+"/product")), "Your phone")
+			break
+		}
+	}
+	if phone == "" {
+		return nil
+	}
+	f := &doctor.Finding{
+		Status:  doctor.Warn,
+		Explain: "It's connected and sharing its files, but your file manager is missing the part that reads phones and cameras (MTP), so it doesn't show up.",
+	}
+	if strings.Contains(strings.ToLower(h.Desktop), "kde") {
+		for _, base := range []string{"/usr/lib/qt6", "/usr/lib64/qt6", "/usr/lib/*/qt6", "/usr/lib/qt", "/usr/lib64/qt5", "/usr/lib/*/qt5"} {
+			if hits, _ := s.Glob(base + "/plugins/kf[56]/kio/*mtp*.so"); len(hits) > 0 {
+				return nil
+			}
+		}
+		f.Fixes = []doctor.Fix{installFix(h, "kio-extras")}
+	} else {
+		for _, p := range []string{"/usr/libexec/gvfsd-mtp", "/usr/lib/gvfsd-mtp", "/usr/lib/gvfs/gvfsd-mtp"} {
+			if s.Exists(p) {
+				return nil
+			}
+		}
+		f.Fixes = []doctor.Fix{installFix(h, "gvfs-mtp")}
+	}
+	f.Title = phone + " is plugged in but doesn't show up in the file manager"
+	f.Fixes = append(f.Fixes, doctor.Fix{Title: "Then unplug it, plug it back in and unlock it"})
+	return f
+}
+
 func runDrives(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	out, err := s.Run(ctx, "lsblk", "-J", "-o", "NAME,PATH,FSTYPE,MOUNTPOINT,TRAN,HOTPLUG,LABEL,SIZE,TYPE")
 	var tree struct {
@@ -141,6 +184,9 @@ func runDrives(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findi
 	}
 	if len(ready) > 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "USB drives open: " + joinAnd(ready)})
+	}
+	if f := phoneNoMTP(s, h); f != nil {
+		fs = append(fs, *f)
 	}
 	if len(fs) == 0 {
 		title := "No USB drive is plugged in"

@@ -26,6 +26,28 @@ func TestDrives(t *testing.T) {
 			`{"name":"sda1","fstype":"vfat","mountpoint":"/media/u/STICK","label":"STICK","size":"32G","type":"part"}`)}}
 		expect(t, run(t, Drives, f, h), doctor.OK, `USB drives open: "STICK"`)
 	})
+	t.Run("phone without mtp support", func(t *testing.T) {
+		const d = "/sys/bus/usb/devices/3-1"
+		phone := files(d+"/manufacturer", "Acme", d+"/product", "Phone 9", d+":1.0/interface", "MTP")
+		none := map[string]string{lsblkCmd: `{"blockdevices":[]}`}
+		f := &sys.Fake{Files: phone, Commands: none}
+		gnome := &doctor.Host{ID: "debian", PackageMgr: "apt", Desktop: "GNOME"}
+		r := run(t, Drives, f, gnome)
+		expect(t, r, doctor.Warn, "Acme Phone 9 is plugged in but doesn't show up in the file manager")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo apt install gvfs-backends" {
+			t.Errorf("fix = %q", c)
+		}
+		f.Files["/usr/libexec/gvfsd-mtp"] = ""
+		expect(t, run(t, Drives, f, gnome), doctor.OK, "No USB drive is plugged in")
+
+		kde := &doctor.Host{ID: "arch", PackageMgr: "pacman", Desktop: "KDE"}
+		f = &sys.Fake{Files: phone, Commands: none}
+		if c := run(t, Drives, f, kde).Findings[0].Fixes[0].Command; c != "sudo pacman -S kio-extras" {
+			t.Errorf("kde fix = %q", c)
+		}
+		f.Files["/usr/lib/qt6/plugins/kf6/kio/kio_mtp.so"] = ""
+		expect(t, run(t, Drives, f, kde), doctor.OK, "No USB drive is plugged in")
+	})
 	t.Run("linux drive owned by root", func(t *testing.T) {
 		ext4 := lsblk(`{"name":"sda1","path":"/dev/sda1","fstype":"ext4","mountpoint":"/media/u/My Backup","label":"My Backup","size":"32G","type":"part"}`)
 		f := &sys.Fake{Commands: map[string]string{lsblkCmd: ext4}, Failing: map[string]error{"test -w /media/u/My Backup": errors.New("exit status 1")}}
