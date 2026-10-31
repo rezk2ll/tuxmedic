@@ -54,6 +54,15 @@ func (d blockDev) path() string {
 	return "/dev/" + d.Name
 }
 
+// linuxFS keep Unix owners, unlike FAT, exFAT and NTFS, which the desktop
+// mounts as the user who plugged them in.
+var linuxFS = map[string]bool{"ext2": true, "ext3": true, "ext4": true, "btrfs": true, "xfs": true, "f2fs": true}
+
+func writable(ctx context.Context, s sys.System, dir string) bool {
+	_, err := s.Run(ctx, "test", "-w", dir)
+	return err == nil
+}
+
 func runDrives(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	out, err := s.Run(ctx, "lsblk", "-J", "-o", "NAME,PATH,FSTYPE,MOUNTPOINT,TRAN,HOTPLUG,LABEL,SIZE,TYPE")
 	var tree struct {
@@ -115,6 +124,15 @@ func runDrives(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findi
 					Title:   "The " + disk.Size + " drive " + disk.path() + " has nothing Linux can read on it",
 					Explain: "It has no file system, or one Linux doesn't know. It may be new and empty, or the card reader may have no card in it. Formatting erases everything on it.",
 					Fixes:   []doctor.Fix{{Title: "If it's empty, format it with the Disks app (choose exFAT to use it on Windows and Mac too)"}},
+				})
+			case usb && p.Mountpoint != "" && linuxFS[p.FSType] && !readOnly[p.Mountpoint] && s.Has("test") && !writable(ctx, s, p.Mountpoint):
+				fs = append(fs, doctor.Finding{
+					Status: doctor.Warn,
+					Title:  "You can open the drive " + p.display() + " but not save to it",
+					Explain: "It's formatted for Linux (" + p.FSType + "), and its top folder belongs to the administrator, as it does on any freshly formatted Linux drive. " +
+						"Unlike USB sticks formatted for Windows, Linux drives keep their owner, so you have to make it yours once.",
+					Fixes:    []doctor.Fix{{Title: "Make the drive's top folder yours", Command: "sudo chown \"$USER\": " + quoteAll([]string{p.Mountpoint})[0], NeedsRoot: true}},
+					Evidence: []string{p.path() + " (" + p.FSType + ") mounted at " + p.Mountpoint + ", not writable"},
 				})
 			case usb && p.Mountpoint != "":
 				ready = append(ready, p.display())

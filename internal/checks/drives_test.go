@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -24,6 +25,17 @@ func TestDrives(t *testing.T) {
 		f := &sys.Fake{Commands: map[string]string{lsblkCmd: lsblk(
 			`{"name":"sda1","fstype":"vfat","mountpoint":"/media/u/STICK","label":"STICK","size":"32G","type":"part"}`)}}
 		expect(t, run(t, Drives, f, h), doctor.OK, `USB drives open: "STICK"`)
+	})
+	t.Run("linux drive owned by root", func(t *testing.T) {
+		ext4 := lsblk(`{"name":"sda1","path":"/dev/sda1","fstype":"ext4","mountpoint":"/media/u/My Backup","label":"My Backup","size":"32G","type":"part"}`)
+		f := &sys.Fake{Commands: map[string]string{lsblkCmd: ext4}, Failing: map[string]error{"test -w /media/u/My Backup": errors.New("exit status 1")}}
+		r := run(t, Drives, f, h)
+		expect(t, r, doctor.Warn, `You can open the drive "My Backup" but not save to it`)
+		if got := r.Findings[0].Fixes[0].Command; got != `sudo chown "$USER": '/media/u/My Backup'` {
+			t.Errorf("fix = %q", got)
+		}
+		f = &sys.Fake{Commands: map[string]string{lsblkCmd: ext4, "test -w /media/u/My Backup": ""}}
+		expect(t, run(t, Drives, f, h), doctor.OK, `USB drives open: "My Backup"`)
 	})
 	t.Run("ntfs read-only", func(t *testing.T) {
 		f := &sys.Fake{
