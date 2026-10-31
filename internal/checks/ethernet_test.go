@@ -7,6 +7,28 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
 
+func TestUnsetWifiCountry(t *testing.T) {
+	const d = "/sys/class/net/wlp2s0/"
+	fake := func(reg string) *sys.Fake {
+		return &sys.Fake{
+			Files:      files(d+"operstate", "up", d+"carrier", "1", d+"wireless/x", ""),
+			Commands:   map[string]string{"iw reg get": reg},
+			Reachable:  map[string]bool{probeAddrs[0]: true},
+			Resolvable: map[string]bool{"debian.org": true},
+		}
+	}
+	h := &doctor.Host{PackageMgr: "apt"}
+	world := "global\ncountry 00: DFS-UNSET\n\t(2402 - 2472 @ 40), (6, 20), (N/A)\n"
+
+	r := run(t, Network, fake(world), h)
+	expect(t, r, doctor.Info, "Wi-Fi doesn't know which country it's in")
+	if c := r.Findings[0].Fixes[0].Command; c != "sudo iw reg set DE" {
+		t.Errorf("fix = %q", c)
+	}
+	expect(t, run(t, Network, fake(world+"\nphy#0 (self-managed)\ncountry US: DFS-FCC\n"), h), doctor.OK, "You're online")
+	expect(t, run(t, Network, fake("global\ncountry DE: DFS-ETSI\n"), h), doctor.OK, "You're online")
+}
+
 func TestSlowEthernet(t *testing.T) {
 	const d = "/sys/class/net/enp3s0/"
 	fake := func(driver, speed, duplex string) *sys.Fake {

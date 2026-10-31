@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -167,6 +168,47 @@ func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Findi
 	return f
 }
 
+// unsetWifiCountry catches Wi-Fi left on the "world" rules (country 00),
+// which allow only the channels legal everywhere: networks on the other
+// 5 GHz channels stay invisible. Adapters that manage their own rules
+// (Intel) list a country per phy, which then wins.
+func unsetWifiCountry(ctx context.Context, s sys.System, ifs []iface) []doctor.Finding {
+	if !slices.ContainsFunc(ifs, func(i iface) bool { return i.wireless }) || !s.Has("iw") {
+		return nil
+	}
+	out, err := s.Run(ctx, "iw", "reg", "get")
+	if err != nil {
+		return nil
+	}
+	global := ""
+	for _, l := range strings.Split(string(out), "\n") {
+		code, ok := strings.CutPrefix(strings.TrimSpace(l), "country ")
+		if !ok {
+			continue
+		}
+		code, _, _ = strings.Cut(code, ":")
+		if global == "" {
+			global = code
+		} else if code != "00" {
+			return nil
+		}
+	}
+	if global != "00" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  "Wi-Fi doesn't know which country it's in, so some 5 GHz networks are hidden",
+		Explain: "Each country allows different Wi-Fi channels. With no country set, Linux uses only the few channels allowed everywhere, " +
+			"so a router on another 5 GHz channel doesn't show up, or the connection falls back to 2.4 GHz.",
+		Fixes: []doctor.Fix{
+			{Title: "Set your country's two-letter code (this example is Germany) until the next restart", Command: "sudo iw reg set DE", NeedsRoot: true},
+			{Title: "To keep it: add the cfg80211 ieee80211_regdom option for your country", URL: "https://wiki.archlinux.org/title/Network_configuration/Wireless#Respecting_the_regulatory_domain"},
+		},
+		Evidence: []string{"iw reg get: country 00"},
+	}}
+}
+
 type iface struct {
 	name     string
 	wireless bool
@@ -254,6 +296,7 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 			fs = append(fs, *b)
 		}
 		fs = append(fs, slowEthernet(s, ifs)...)
+		fs = append(fs, unsetWifiCountry(ctx, s, ifs)...)
 		f := doctor.Finding{Status: doctor.OK, Title: "You're online"}
 		if w := wifiSignal(s); w != nil {
 			if w.Status == doctor.OK {
