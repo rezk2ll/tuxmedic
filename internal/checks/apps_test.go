@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -19,6 +21,34 @@ func appsFake(files map[string]string, cmds map[string]string) *sys.Fake {
 	}
 	cmds["pipewire --version"] = "pipewire 1.4\n"
 	return &sys.Fake{Files: files, Commands: cmds}
+}
+
+func TestFileWatches(t *testing.T) {
+	gnome := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Desktop: "GNOME", Session: "wayland"}
+	files := func(limit string, procs ...string) map[string]string {
+		m := map[string]string{
+			portalDir + "/portals/gnome.portal":     gnomePortal,
+			"/proc/sys/fs/inotify/max_user_watches": limit + "\n",
+		}
+		for i, p := range procs {
+			m[fmt.Sprintf("/proc/%d/comm", 100+i)] = p + "\n"
+		}
+		return m
+	}
+
+	t.Run("low limit with an editor open", func(t *testing.T) {
+		r := run(t, Apps, appsFake(files("8192", "bash", "code"), nil), gnome)
+		expect(t, r, doctor.Info, "code can only watch 8192 files for changes")
+		if c := r.Findings[0].Fixes[0].Command; !strings.Contains(c, "fs.inotify.max_user_watches=524288") {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("low limit, nothing that needs it", func(t *testing.T) {
+		expect(t, run(t, Apps, appsFake(files("8192", "bash"), nil), gnome), doctor.OK, "Screen sharing")
+	})
+	t.Run("modern default", func(t *testing.T) {
+		expect(t, run(t, Apps, appsFake(files("524288", "code"), nil), gnome), doctor.OK, "Screen sharing")
+	})
 }
 
 func TestApps(t *testing.T) {

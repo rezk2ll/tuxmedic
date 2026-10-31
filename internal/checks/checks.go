@@ -54,7 +54,7 @@ var keywords = map[string]string{
 		"kernel suddenly",
 	"boot": "boot booting startup start starting slow login services service failed",
 	"apps": "flatpak snap screenshare screensharing share sharing portal wayland obs dialog open save sandbox " +
-		"screenshot",
+		"screenshot vscode editor watch watching inotify dropbox syncthing syncing",
 	"permissions": "permission permissions denied group groups docker sudo root arduino serial dialout owner " +
 		"ownership loop login",
 	"defaults": "default app apps browser link links click clicking open opens opening pdf folder folders " +

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -31,7 +32,35 @@ func runApps(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	var fs []doctor.Finding
 	fs = append(fs, portals(ctx, s, h)...)
 	fs = append(fs, snaps(ctx, s)...)
+	fs = append(fs, fileWatches(s)...)
 	return fs
+}
+
+// watchHungry apps watch every file in a project or synced folder, one
+// inotify watch each.
+var watchHungry = []string{"code", "code-oss", "codium", "cursor", "idea", "pycharm", "webstorm", "goland",
+	"clion", "rider", "phpstorm", "rustrover", "dropbox", "syncthing", "nextcloud", "insync", "zed-editor", "zed"}
+
+func fileWatches(s sys.System) []doctor.Finding {
+	limit, err := strconv.Atoi(readTrim(s, "/proc/sys/fs/inotify/max_user_watches"))
+	if err != nil || limit >= 100000 {
+		return nil
+	}
+	app := running(s, watchHungry...)
+	if app == "" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  fmt.Sprintf("%s can only watch %d files for changes", app, limit),
+		Explain: "Editors and sync apps ask Linux to tell them when files change, one file at a time. With a big project or " +
+			"synced folder they hit this limit, then show \"Unable to watch for file changes\" or stop syncing new files.",
+		Fixes: []doctor.Fix{{
+			Title:     "Raise the limit to 524288 (uses at most about 500 MB of memory, only if every watch is in use)",
+			Command:   "echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/90-inotify.conf && sudo sysctl --system",
+			NeedsRoot: true,
+		}},
+	}}
 }
 
 type portalFile struct {
