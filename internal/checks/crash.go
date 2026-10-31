@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
@@ -133,7 +134,7 @@ func runCrash(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 			events = append(events, e)
 		}
 	}
-	unclean := groupCrashes(events)
+	unclean := groupCrashes(events, updateBlame(ctx, s, h))
 	switch {
 	case len(unclean) > 0:
 		fs = append(fs, unclean...)
@@ -158,12 +159,14 @@ type crashEvent struct {
 	f     doctor.Finding
 	cause string
 	at    string
+	end   time.Time
 }
 
 // groupCrashes folds sessions that ended for the same reason into one finding,
 // so three out-of-memory freezes read as one pattern, not three repeats.
-// events are newest first.
-func groupCrashes(events []crashEvent) []doctor.Finding {
+// events are newest first. blame, when it names an update made shortly before
+// the first crash of a group, is put in front of that group's explanation.
+func groupCrashes(events []crashEvent, blame func(first time.Time) (string, []doctor.Fix)) []doctor.Finding {
 	var order []string
 	byCause := map[string][]crashEvent{}
 	for _, e := range events {
@@ -188,9 +191,44 @@ func groupCrashes(events []crashEvent) []doctor.Finding {
 			}
 			f.Evidence = append([]string{"Sessions that ended this way: " + strings.Join(ats, ", ")}, f.Evidence...)
 		}
+		if note, fixes := blame(es[len(es)-1].end); note != "" {
+			f.Explain = strings.TrimSpace(note + " " + f.Explain)
+			f.Fixes = append(fixes, f.Fixes...)
+		}
 		out = append(out, f)
 	}
 	return out
+}
+
+// updateBlame reads the package history once, on the first crash group that
+// asks, and names the update made just before a group's first crash.
+func updateBlame(ctx context.Context, s sys.System, h *doctor.Host) func(time.Time) (string, []doctor.Fix) {
+	var history []pkgChange
+	loaded := false
+	return func(first time.Time) (string, []doctor.Fix) {
+		if !loaded {
+			history, _ = packageHistory(ctx, s, h)
+			loaded = true
+		}
+		a, c, ok := suspectUpdate(history, first)
+		if !ok {
+			return "", nil
+		}
+		gap := first.Sub(c.at)
+		after := "within an hour of"
+		switch {
+		case gap >= 48*time.Hour:
+			after = plural(int(gap.Hours()/24), "day", "days") + " after"
+		case gap >= time.Hour:
+			after = plural(int(gap.Hours()), "hour", "hours") + " after"
+		}
+		note := fmt.Sprintf("This started %s an update to %s %s (%s).",
+			after, strings.ToLower(a.label[:1])+a.label[1:], when(c.at, s.Now()), describeChange(c))
+		if fx, ok := undoFix(h, a, c); ok {
+			return note, []doctor.Fix{fx}
+		}
+		return note, nil
+	}
 }
 
 func inspectBoot(ctx context.Context, s sys.System, b boot) (crashEvent, bool) {
@@ -227,13 +265,13 @@ func inspectBoot(ctx context.Context, s sys.System, b boot) (crashEvent, bool) {
 				f.Explain = c.explain
 				f.Fixes = c.fixes
 				f.Evidence = evidence(tail, i)
-				return crashEvent{f: f, cause: c.title, at: at}, true
+				return crashEvent{f: f, cause: c.title, at: at, end: end}, true
 			}
 		}
 	}
 	f.Explain = "Nothing was written to the log before it stopped. That usually means the power was cut, the power button was held down, or the system froze too hard to log anything. Once is nothing to worry about; if it keeps happening, it points to hardware, power or a hard freeze."
 	f.Evidence = evidence(tail, len(tail)-1)
-	return crashEvent{f: f, at: at}, true
+	return crashEvent{f: f, at: at, end: end}, true
 }
 
 func evidence(es []entry, at int) []string {

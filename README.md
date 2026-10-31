@@ -21,7 +21,7 @@ tuxmedic asks them for you. It runs 21 checks, usually in under a second, and te
 
 Each check answers a question people actually ask:
 
-- Crashes & freezes: why did my computer crash, freeze or restart by itself? It reads the previous sessions' logs and names the cause: out of memory, graphics card hang, kernel panic, overheating.
+- Crashes & freezes: why did my computer crash, freeze or restart by itself? It reads the previous sessions' logs and names the cause: out of memory, graphics card hang, kernel panic, overheating. When the crashes began right after a kernel, graphics or desktop update, it says which one and how to go back.
 - Internet & Wi-Fi: why can't I get online? It tells apart airplane mode, a router with no internet, broken DNS and hotel sign-in pages, and notices a connection that keeps dropping.
 - Sound: why is there no sound? Muted output, the wrong default device, a monitor with no HDMI profile, a Bluetooth headset stuck in call quality, missing firmware.
 - Camera & microphone: why don't they work in video calls? Another app holding the camera, the GNOME privacy switches, a muted or silent microphone, apps recording the speakers instead of the mic, Intel IPU laptop cameras that need extra drivers.

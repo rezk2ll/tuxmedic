@@ -125,9 +125,7 @@ func runChanges(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 			Explain:  "If you've had trouble with " + a.symptoms + " since then, this update is the first thing to suspect.",
 			Evidence: changeLines(hits, now),
 		}
-		if a.label == "The Linux kernel" {
-			f.Fixes = []doctor.Fix{{Title: "To test the previous kernel: restart, open the boot menu (hold Shift or press Esc), choose Advanced options and pick the older version"}}
-		} else if fx, ok := downgradeFix(h, latest); ok {
+		if fx, ok := undoFix(h, a, latest); ok {
 			f.Fixes = []doctor.Fix{fx}
 		}
 		fs = append(fs, f)
@@ -169,6 +167,42 @@ func changeLines(cs []pkgChange, now time.Time) []string {
 		out = append(out, when(c.at, now)+": "+describeChange(c))
 	}
 	return out
+}
+
+func undoFix(h *doctor.Host, a changeArea, c pkgChange) (doctor.Fix, bool) {
+	if a.label == "The Linux kernel" && h.PackageMgr != "rpm-ostree" {
+		return doctor.Fix{Title: "To test the previous kernel: restart, open the boot menu (hold Shift or press Esc), choose Advanced options and pick the older version"}, true
+	}
+	return downgradeFix(h, c)
+}
+
+// crashAreas are the areas whose updates can take the whole computer down.
+var crashAreas = map[string]bool{
+	"The Linux kernel": true, "Graphics drivers": true, "Device firmware": true, "The desktop": true, "systemd": true,
+}
+
+// suspectUpdate finds the update most likely to have started crashes first
+// seen at first: the latest install or upgrade in a crash-prone area in the
+// three days before.
+func suspectUpdate(changes []pkgChange, first time.Time) (changeArea, pkgChange, bool) {
+	var best pkgChange
+	var bestArea changeArea
+	found := false
+	for _, c := range changes {
+		if c.to == "" || !c.at.Before(first) || first.Sub(c.at) > 72*time.Hour {
+			continue
+		}
+		if found && (c.at.Before(best.at) || c.at.Equal(best.at) && len(c.pkg) >= len(best.pkg)) {
+			continue
+		}
+		for _, a := range areas {
+			if crashAreas[a.label] && a.match(strings.ToLower(c.pkg)) {
+				best, bestArea, found = c, a, true
+				break
+			}
+		}
+	}
+	return bestArea, best, found
 }
 
 func downgradeFix(h *doctor.Host, c pkgChange) (doctor.Fix, bool) {
