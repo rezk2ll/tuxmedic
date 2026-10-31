@@ -198,7 +198,23 @@ func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 // the sound service remembers per app, is muted or near zero: the "no sound
 // in Firefox only" case.
 func silentApps(ctx context.Context, s sys.System) []doctor.Finding {
-	out, err := s.Run(ctx, "pactl", "-f", "json", "list", "sink-inputs")
+	return silentStreams(ctx, s, "sink-input", "is playing, but its own volume is muted or at zero",
+		"Each app has its own volume next to the main one, and the sound service remembers it. Other apps play fine; "+
+			"this one stays silent until its volume is turned back up.",
+		"Applications in your sound settings (or the Playback tab of pavucontrol)")
+}
+
+// silentRecorders is the same for recording: the microphone works, but the
+// call app's own input volume is muted.
+func silentRecorders(ctx context.Context, s sys.System) []doctor.Finding {
+	return silentStreams(ctx, s, "source-output", "is recording, but its own microphone volume is muted or at zero",
+		"Each app has its own input volume next to the microphone's, and the sound service remembers it. The microphone works; "+
+			"this app gets silence until its volume is turned back up.",
+		"the Recording tab of pavucontrol")
+}
+
+func silentStreams(ctx context.Context, s sys.System, kind, title, explain, where string) []doctor.Finding {
+	out, err := s.Run(ctx, "pactl", "-f", "json", "list", kind+"s")
 	var streams []struct {
 		paSink
 		Index      int               `json:"index"`
@@ -217,18 +233,17 @@ func silentApps(ctx context.Context, s sys.System) []doctor.Finding {
 		var fix doctor.Fix
 		switch {
 		case st.Mute:
-			fix = doctor.Fix{Title: "Unmute it", Command: fmt.Sprintf("pactl set-sink-input-mute %d 0", st.Index)}
+			fix = doctor.Fix{Title: "Unmute it", Command: fmt.Sprintf("pactl set-%s-mute %d 0", kind, st.Index)}
 		case st.volume() < 5:
-			fix = doctor.Fix{Title: "Set it to 100%", Command: fmt.Sprintf("pactl set-sink-input-volume %d 100%%", st.Index)}
+			fix = doctor.Fix{Title: "Set it to 100%", Command: fmt.Sprintf("pactl set-%s-volume %d 100%%", kind, st.Index)}
 		default:
 			continue
 		}
 		fs = append(fs, doctor.Finding{
-			Status: doctor.Warn,
-			Title:  app + " is playing, but its own volume is muted or at zero",
-			Explain: "Each app has its own volume next to the main one, and the sound service remembers it. Other apps play fine; " +
-				"this one stays silent until its volume is turned back up.",
-			Fixes: []doctor.Fix{fix, {Title: "Or turn it up under Applications in your sound settings (or the Playback tab of pavucontrol)"}},
+			Status:  doctor.Warn,
+			Title:   app + " " + title,
+			Explain: explain,
+			Fixes:   []doctor.Fix{fix, {Title: "Or turn it up under " + where}},
 		})
 	}
 	return fs

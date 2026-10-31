@@ -41,6 +41,15 @@ func TestCamera(t *testing.T) {
 		expect(t, r, doctor.OK, "Camera ready: Acme HD Webcam")
 		expect(t, r, doctor.OK, "Microphone ready: Built-in Audio Analog Stereo")
 	})
+	t.Run("call app muted on its own", func(t *testing.T) {
+		f := camFake(webcam(), micOn, micName)
+		f.Commands["pactl -f json list source-outputs"] = `[{"index":19,"corked":false,"mute":true,"volume":{"mono":{"value_percent":"100%"}},"properties":{"application.name":"Zoom"}}]`
+		r := run(t, Camera, f, laptop)
+		expect(t, r, doctor.Warn, "Zoom is recording, but its own microphone volume is muted or at zero")
+		if c := r.Findings[0].Fixes[0].Command; c != "pactl set-source-output-mute 19 0" {
+			t.Errorf("fix = %q", c)
+		}
+	})
 	t.Run("camera held by another app", func(t *testing.T) {
 		f := camFake(webcam(), micOn, micName)
 		f.Files["/proc/4242/comm"] = "zoom\n"

@@ -196,7 +196,7 @@ func microphone(ctx context.Context, s sys.System) []doctor.Finding {
 				Fixes:   []doctor.Fix{{Title: "Turn it up", Command: "pactl set-source-volume @DEFAULT_SOURCE@ 100%"}},
 			}}
 		}
-		return []doctor.Finding{{Status: doctor.OK, Title: "Microphone ready: " + label}}
+		return append(silentRecorders(ctx, s), doctor.Finding{Status: doctor.OK, Title: "Microphone ready: " + label})
 	}
 	return nil
 }
