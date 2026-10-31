@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -48,10 +49,48 @@ func runPermissions(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	fs = append(fs, ownHostname(ctx, s)...)
 	fs = append(fs, lockedOut(ctx, s, h)...)
 	fs = append(fs, serialAccess(ctx, s, h)...)
+	fs = append(fs, openSSHKeys(ctx, s, h)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Your group memberships are active and your home folder belongs to you"})
 	}
 	return fs
+}
+
+// openSSHKeys catches private keys other users can read, typically after
+// copying them from a USB stick or Windows. ssh then refuses to use them
+// ("UNPROTECTED PRIVATE KEY FILE") and asks for a password instead.
+func openSSHKeys(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Home == "" || !s.Has("stat") {
+		return nil
+	}
+	keys, _ := s.Glob(h.Home + "/.ssh/id_*")
+	var open []string
+	for _, k := range keys {
+		if strings.HasSuffix(k, ".pub") {
+			continue
+		}
+		out, err := s.Run(ctx, "stat", "-c", "%a", k)
+		if err != nil {
+			continue
+		}
+		if mode, err := strconv.ParseUint(strings.TrimSpace(string(out)), 8, 32); err == nil && mode&0o077 != 0 {
+			open = append(open, k)
+		}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+	short := make([]string, len(open))
+	for i, k := range open {
+		short[i] = "~" + strings.TrimPrefix(k, h.Home)
+	}
+	return []doctor.Finding{{
+		Status: doctor.Warn,
+		Title:  "SSH won't use your key " + joinAnd(short) + ": other users can read it",
+		Explain: "A private key must be readable only by you. When it isn't, ssh ignores it with \"UNPROTECTED PRIVATE KEY FILE\" " +
+			"and falls back to asking for a password, or the login fails.",
+		Fixes: []doctor.Fix{{Title: "Make it private", Command: "chmod 600 " + strings.Join(quoteAll(open), " ")}},
+	}}
 }
 
 // serialAccess covers the two reasons an Arduino or USB serial adapter

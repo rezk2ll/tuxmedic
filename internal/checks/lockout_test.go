@@ -10,6 +10,26 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
 
+func TestOpenSSHKeys(t *testing.T) {
+	h := &doctor.Host{Home: "/home/sam"}
+	fake := &sys.Fake{
+		Files: files("/home/sam/.ssh/id_ed25519", "", "/home/sam/.ssh/id_ed25519.pub", "", "/home/sam/.ssh/id_rsa", ""),
+		Commands: map[string]string{
+			"stat -c %a /home/sam/.ssh/id_ed25519": "644\n",
+			"stat -c %a /home/sam/.ssh/id_rsa":     "600\n",
+		},
+	}
+	fs := openSSHKeys(context.Background(), fake, h)
+	if len(fs) != 1 || fs[0].Title != "SSH won't use your key ~/.ssh/id_ed25519: other users can read it" ||
+		fs[0].Fixes[0].Command != "chmod 600 /home/sam/.ssh/id_ed25519" {
+		t.Fatalf("findings = %+v", fs)
+	}
+	fake.Commands["stat -c %a /home/sam/.ssh/id_ed25519"] = "400\n"
+	if fs := openSSHKeys(context.Background(), fake, h); len(fs) != 0 {
+		t.Errorf("private keys: %+v", fs)
+	}
+}
+
 func TestSerialAccess(t *testing.T) {
 	ubuntu := &doctor.Host{ID: "ubuntu", PackageMgr: "apt", Systemd: true, User: "sam"}
 	brl := "journalctl --no-pager -q -o json -b -k -g brltty"
