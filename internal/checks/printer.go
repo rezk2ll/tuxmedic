@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -56,6 +57,15 @@ func runPrinter(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 			Explain: "Most printers from the last ten years print without installing a driver. Open your printer settings and add it; " +
 				"network printers show up on their own when they're on the same network.",
 		}
+		if usb := ippUSBPrinters(s); len(usb) > 0 && !s.Has("ipp-usb") && !s.Exists("/usr/sbin/ipp-usb") {
+			return []doctor.Finding{{
+				Status: doctor.Warn,
+				Title:  "Your USB printer needs ipp-usb to work without a driver: " + joinAnd(usb),
+				Explain: "This printer speaks the same driverless printing protocol over USB as network printers do, but Linux only finds it that way through the small ipp-usb service. " +
+					"Without it, the printer doesn't show up, or only with an old driver that may not work.",
+				Fixes: []doctor.Fix{installFix(h, "ipp-usb"), {Title: "Then unplug the printer and plug it back in"}},
+			}}
+		}
 		if found := discovered(ctx, s); len(found) > 0 {
 			f.Title = "A printer on your network is ready to add: " + joinAnd(found)
 			f.Explain = "It was found on your network and works without a driver. Add it in your printer settings, or print to it directly from the print dialog."
@@ -99,6 +109,28 @@ func runPrinter(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Ready to print: " + joinAnd(ready)})
 	}
 	return fs
+}
+
+// ippUSBPrinters names the plugged-in USB devices with an IPP-over-USB
+// interface: class 7 (printer), subclass 1, protocol 4.
+func ippUSBPrinters(s sys.System) []string {
+	ifs, _ := s.Glob("/sys/bus/usb/devices/*:*/bInterfaceProtocol")
+	var out []string
+	for _, p := range ifs {
+		d := strings.TrimSuffix(p, "/bInterfaceProtocol")
+		if readTrim(s, p) != "04" || readTrim(s, d+"/bInterfaceClass") != "07" || readTrim(s, d+"/bInterfaceSubClass") != "01" {
+			continue
+		}
+		dev, _, _ := strings.Cut(d, ":")
+		name := strings.TrimSpace(readTrim(s, dev+"/manufacturer") + " " + readTrim(s, dev+"/product"))
+		if name == "" {
+			name = "a USB printer"
+		}
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // parsePrinters reads `lpstat -p` lines like

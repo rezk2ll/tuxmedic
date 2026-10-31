@@ -42,6 +42,21 @@ func TestPrinter(t *testing.T) {
 		expect(t, run(t, Printer, cups("printer Office now printing Office-12.  enabled since Thu 30 Oct\n",
 			"Office-12  alex  1024   Thu 30 Oct 2026 10:01:00 AM UTC\n", nil), h), doctor.OK, "Ready to print: Office")
 	})
+	t.Run("usb printer without ipp-usb", func(t *testing.T) {
+		const d = "/sys/bus/usb/devices/1-2"
+		f := cups("", "", map[string]string{"lpstat -e": ""})
+		f.Files = files(d+"/manufacturer", "Acme", d+"/product", "LaserJet 100",
+			d+":1.0/bInterfaceClass", "07", d+":1.0/bInterfaceSubClass", "01", d+":1.0/bInterfaceProtocol", "02",
+			d+":1.1/bInterfaceClass", "07", d+":1.1/bInterfaceSubClass", "01", d+":1.1/bInterfaceProtocol", "04",
+			d+":1.2/bInterfaceClass", "07", d+":1.2/bInterfaceSubClass", "01", d+":1.2/bInterfaceProtocol", "04")
+		r := run(t, Printer, f, h)
+		expect(t, r, doctor.Warn, "needs ipp-usb to work without a driver: Acme LaserJet 100")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo dnf install ipp-usb" {
+			t.Errorf("fix = %q", c)
+		}
+		f.Commands["ipp-usb --version"] = ""
+		expect(t, run(t, Printer, f, h), doctor.Info, "No printer is set up")
+	})
 	t.Run("none set up, one on the network", func(t *testing.T) {
 		expect(t, run(t, Printer, cups("", "", map[string]string{"lpstat -e": "Acme_LaserJet\n"}), h),
 			doctor.Info, "A printer on your network is ready to add: Acme_LaserJet")
