@@ -379,6 +379,14 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return tea.Batch(m.runAll(), m.notify("Running every check again…"))
 	case "x":
 		return m.export()
+	case "n", "N":
+		d := 1
+		if k == "N" {
+			d = -1
+		}
+		if !m.nextProblem(d) {
+			return m.notify("No other check found a problem")
+		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		return m.trigger(int(k[0] - '1'))
 	}
@@ -420,6 +428,25 @@ func (m *Model) selectIndex(i int) {
 		m.detail.GotoTop()
 	}
 	m.refreshDetail()
+}
+
+// nextProblem selects the next check, in direction d and wrapping around,
+// whose result is a warning or worse.
+func (m *Model) nextProblem(d int) bool {
+	n := len(m.entries)
+	for step := 1; step < n; step++ {
+		i := ((m.sel+d*step)%n + n) % n
+		e := m.entries[i]
+		if !e.overview && problems(m.reports[m.checks[e.check].ID]) > 0 {
+			if m.singlePane() {
+				m.inDetail = false
+			}
+			m.focus = focusList
+			m.selectIndex(i)
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) current() *doctor.Check {
@@ -613,6 +640,12 @@ func (m *Model) paletteItems() []paletteItem {
 			if c := m.current(); c != nil {
 				m.evidence[c.ID] = !m.evidence[c.ID]
 				m.refreshDetail()
+			}
+			return nil
+		}},
+		{"Go to the next check that found a problem", "n", func(m *Model) tea.Cmd {
+			if !m.nextProblem(1) {
+				return m.notify("No other check found a problem")
 			}
 			return nil
 		}},

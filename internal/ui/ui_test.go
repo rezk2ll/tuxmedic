@@ -67,6 +67,7 @@ func TestViewFitsEverySize(t *testing.T) {
 		"overview": nil,
 		"check":    {"down", "enter"},
 		"evidence": {"down", "enter", "e"},
+		"next":     {"n", "n"},
 		"help":     {"?"},
 		"palette":  {"ctrl+p"},
 		"confirm":  {"down", "enter", "1"},
@@ -164,6 +165,32 @@ func TestNumberOnOverviewOpensCheck(t *testing.T) {
 	m.Update(key("esc"))
 	if m.confirm != nil {
 		t.Error("esc should cancel the confirmation")
+	}
+}
+
+func TestNextProblemSkipsHealthyChecks(t *testing.T) {
+	m := newTestModel(t, false)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	var seen []string
+	for range 3 {
+		m.Update(key("n"))
+		c := m.current()
+		if c == nil {
+			t.Fatal("n left nothing selected")
+		}
+		seen = append(seen, c.ID)
+	}
+	if seen[0] == seen[1] || seen[0] != seen[2] {
+		t.Errorf("n should visit the two problem checks and wrap around, got %v", seen)
+	}
+	for _, id := range seen {
+		if id != "crash" && id != "sound" {
+			t.Errorf("n landed on %s, which found no problem", id)
+		}
+	}
+	m.Update(key("N"))
+	if c := m.current(); c == nil || c.ID != seen[1] {
+		t.Errorf("N should go back to %s, got %+v", seen[1], c)
 	}
 }
 

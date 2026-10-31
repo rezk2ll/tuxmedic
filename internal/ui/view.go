@@ -507,6 +507,7 @@ func (m *Model) overlay() string {
 			{"enter  →", "open a check"},
 			{"esc  ←", "go back"},
 			{"tab", "switch between the list and the details"},
+			{"n  /  N", "next  /  previous check that found a problem"},
 			{"1 to 9", "run or copy a fix; on the overview, open a check"},
 			{"e", "show the log lines behind a finding"},
 			{"r  /  R", "check this again  /  run every check again"},
