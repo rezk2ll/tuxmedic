@@ -84,6 +84,17 @@ func runTouchpad(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fin
 				}}
 			}
 		}
+		if out, _ := s.Run(ctx, "gsettings", "get", "org.gnome.desktop.peripherals.touchpad", "tap-to-click"); strings.TrimSpace(string(out)) == "false" {
+			return []doctor.Finding{{
+				Status:  doctor.Info,
+				Title:   "Tapping the touchpad doesn't click: tap to click is off",
+				Explain: "The touchpad works, but only pressing it down clicks. Tapping it lightly clicks too once tap to click is on.",
+				Fixes: []doctor.Fix{
+					{Title: "Turn it on in Settings, under Mouse & Touchpad"},
+					{Title: "Or turn it on from here", Command: "gsettings set org.gnome.desktop.peripherals.touchpad tap-to-click true"},
+				},
+			}}
+		}
 	}
 	return []doctor.Finding{{Status: doctor.OK, Title: "Touchpad found: " + pad}}
 }

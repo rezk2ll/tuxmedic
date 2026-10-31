@@ -49,6 +49,13 @@ func TestTouchpad(t *testing.T) {
 		}
 		expect(t, run(t, Touchpad, f, laptop), doctor.OK, "Touchpad found")
 	})
+	t.Run("tap to click off", func(t *testing.T) {
+		f := &sys.Fake{
+			Files:    map[string]string{"/proc/bus/input/devices": inputs},
+			Commands: map[string]string{"gsettings get org.gnome.desktop.peripherals.touchpad tap-to-click": "false\n"},
+		}
+		expect(t, run(t, Touchpad, f, laptop), doctor.Info, "tap to click is off")
+	})
 	t.Run("desktop", func(t *testing.T) {
 		expect(t, run(t, Touchpad, &sys.Fake{}, &doctor.Host{}), doctor.Skipped, "Only laptops")
 	})
