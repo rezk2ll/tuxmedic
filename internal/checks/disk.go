@@ -183,9 +183,6 @@ func cleanupFixes(h *doctor.Host) []doctor.Fix {
 	case "rpm-ostree":
 		fx = append(fx, doctor.Fix{Title: "Delete cached update files", Command: "sudo rpm-ostree cleanup --base --repomd", NeedsRoot: true})
 	}
-	if h.PackageMgr == "rpm-ostree" || h.PackageMgr == "transactional-update" {
-		fx = append(fx, doctor.Fix{Title: "Remove app runtimes no app uses any more", Command: "flatpak uninstall --unused"})
-	}
 	if h.Systemd {
 		fx = append(fx, doctor.Fix{Title: "Shrink the system log to 200 MB", Command: "sudo journalctl --vacuum-size=200M", NeedsRoot: true})
 	}

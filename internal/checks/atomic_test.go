@@ -28,6 +28,15 @@ func TestFixesOnImageBasedSystems(t *testing.T) {
 	if !slices.Contains(cleanup, "sudo rpm-ostree cleanup --base --repomd") || !slices.Contains(cleanup, "flatpak uninstall --unused") {
 		t.Errorf("cleanup = %q", cleanup)
 	}
+	for _, h := range []*doctor.Host{ostree, aeon, {PackageMgr: "apt", Systemd: true}} {
+		seen := map[string]bool{}
+		for _, f := range cleanupFixes(h) {
+			if seen[f.Command] {
+				t.Errorf("%s: %q is offered twice", h.PackageMgr, f.Command)
+			}
+			seen[f.Command] = true
+		}
+	}
 }
 
 func TestStagedUpdate(t *testing.T) {
