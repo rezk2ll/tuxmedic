@@ -35,4 +35,17 @@ func TestSound(t *testing.T) {
 	expect(t, run(t, Sound, fake(dummy, "inactive\nactive\n"), h), doctor.Fail, "No sound hardware was found")
 	expect(t, run(t, Sound, fake(dummy, ""), h), doctor.Fail, "No sound hardware was found")
 	expect(t, run(t, Sound, fake(speakers, "active\ninactive\n"), h), doctor.OK, "Sound plays through Built-in Audio Analog Stereo at 65%")
+
+	streams := fake(speakers, "active\ninactive\n")
+	streams.Commands["pactl -f json list sink-inputs"] = `[
+	 {"index":71,"corked":false,"mute":true,"volume":{"front-left":{"value_percent":"100%"}},"properties":{"application.name":"Firefox"}},
+	 {"index":72,"corked":true,"mute":true,"volume":{},"properties":{"application.name":"Rhythmbox"}},
+	 {"index":73,"corked":false,"mute":false,"volume":{"mono":{"value_percent":"0%"}},"properties":{"application.name":"Zoom"}},
+	 {"index":74,"corked":false,"mute":false,"volume":{"mono":{"value_percent":"80%"}},"properties":{"application.name":"Slack"}}]`
+	r = run(t, Sound, streams, h)
+	expect(t, r, doctor.Warn, "Firefox is playing, but its own volume is muted or at zero")
+	if len(r.Findings) != 3 || r.Findings[0].Fixes[0].Command != "pactl set-sink-input-mute 71 0" ||
+		r.Findings[1].Fixes[0].Command != "pactl set-sink-input-volume 73 100%" {
+		t.Errorf("findings = %+v", r.Findings)
+	}
 }

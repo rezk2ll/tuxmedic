@@ -168,6 +168,7 @@ func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		})
 	default:
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: fmt.Sprintf("Sound plays through %s at %d%%", name, vol)})
+		fs = append(fs, silentApps(ctx, s)...)
 	}
 
 	if port := activePort(def); port != nil && port.Availability == "not available" {
@@ -190,6 +191,46 @@ func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 
 	fs = append(fs, monitorAudio(ctx, s, real)...)
 	fs = append(fs, bluetoothCallMode(ctx, s)...)
+	return fs
+}
+
+// silentApps catches an app that is playing while its own volume, which
+// the sound service remembers per app, is muted or near zero: the "no sound
+// in Firefox only" case.
+func silentApps(ctx context.Context, s sys.System) []doctor.Finding {
+	out, err := s.Run(ctx, "pactl", "-f", "json", "list", "sink-inputs")
+	var streams []struct {
+		paSink
+		Index      int               `json:"index"`
+		Corked     bool              `json:"corked"`
+		Properties map[string]string `json:"properties"`
+	}
+	if err != nil || json.Unmarshal(out, &streams) != nil {
+		return nil
+	}
+	var fs []doctor.Finding
+	for _, st := range streams {
+		app := st.Properties["application.name"]
+		if st.Corked || app == "" {
+			continue
+		}
+		var fix doctor.Fix
+		switch {
+		case st.Mute:
+			fix = doctor.Fix{Title: "Unmute it", Command: fmt.Sprintf("pactl set-sink-input-mute %d 0", st.Index)}
+		case st.volume() < 5:
+			fix = doctor.Fix{Title: "Set it to 100%", Command: fmt.Sprintf("pactl set-sink-input-volume %d 100%%", st.Index)}
+		default:
+			continue
+		}
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Warn,
+			Title:  app + " is playing, but its own volume is muted or at zero",
+			Explain: "Each app has its own volume next to the main one, and the sound service remembers it. Other apps play fine; " +
+				"this one stays silent until its volume is turned back up.",
+			Fixes: []doctor.Fix{fix, {Title: "Or turn it up under Applications in your sound settings (or the Playback tab of pavucontrol)"}},
+		})
+	}
 	return fs
 }
 
