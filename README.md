@@ -29,7 +29,7 @@ Each check answers a question people actually ask:
 - Screens & monitors: why does my second monitor stay black? A monitor switched off in settings, a cable that doesn't pass the monitor's details, a DisplayLink dock without its driver, a Thunderbolt dock waiting for approval, a laptop screen whose brightness can't be changed (with the kernel setting that fixes it, for your boot loader).
 - Keyboard & typing: why do keys type late or not at all? Slow Keys or Sticky Keys switched on by holding Shift, and input methods for other languages (IBus, Fcitx) that apps expect but aren't running, or that run twice.
 - Touchpad: why doesn't it move the pointer? A touchpad Linux doesn't see at all, or one the desktop switched off (by a key, or while a mouse is plugged in).
-- Fingerprint reader: why can't I log in with my finger? fprintd missing, a reader Linux has no driver for (with its USB ID to look up), no finger saved yet.
+- Fingerprint reader: why can't I log in with my finger? fprintd missing, a reader Linux has no driver for (with its USB ID to look up), no finger saved yet, or a saved finger that sudo never asks for.
 - USB drives & Windows disks: why won't it open, or why is it read-only? A missing NTFS or exFAT driver, an NTFS drive Windows Fast Startup left marked as in use, a stick that is plugged in but not mounted.
 - Printers: why can't I print? A stopped printing service, a printer CUPS paused after an error, jobs stuck in the queue, a network printer that is ready but not added yet.
 - Battery & charging: why isn't it charging? A charge limit set on purpose, a charger too weak for the laptop, a worn battery, fast drain.

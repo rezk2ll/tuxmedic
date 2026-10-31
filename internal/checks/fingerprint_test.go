@@ -17,6 +17,8 @@ func fpReader(cmds map[string]string) *sys.Fake {
 			"/sys/bus/usb/devices/1-4/idVendor":                "04f3\n",
 			"/sys/bus/usb/devices/1-4/idProduct":               "2234\n",
 			"/sys/bus/usb/devices/1-4/1-4:1.0/bInterfaceClass": "03\n",
+			"/etc/pam.d/common-auth": "auth\t[success=2 default=ignore]\tpam_fprintd.so max-tries=1 timeout=10\n" +
+				"auth\t[success=1 default=ignore]\tpam_unix.so nullok try_first_pass\n",
 		},
 		Commands: cmds,
 	}
@@ -48,6 +50,34 @@ func TestFingerprint(t *testing.T) {
 		f := fpReader(nil)
 		delete(f.Files, "/sys/bus/usb/devices/3-3/idVendor")
 		expect(t, run(t, Fingerprint, f, h), doctor.Skipped, "No fingerprint reader")
+	})
+	enrolled := map[string]string{"fprintd-list alex": tests[3].cmds["fprintd-list alex"]}
+	t.Run("enrolled, but PAM never asks for it", func(t *testing.T) {
+		cmds := map[string]string{"pam-auth-update": ""}
+		for k, v := range enrolled {
+			cmds[k] = v
+		}
+		f := fpReader(cmds)
+		f.Files["/etc/pam.d/common-auth"] = "auth\t[success=1 default=ignore]\tpam_unix.so nullok\n"
+		f.Files["/etc/pam.d/gdm-fingerprint"] = "auth\trequisite\tpam_nologin.so\nauth\trequired\tpam_fprintd.so\n"
+		r := run(t, Fingerprint, f, h)
+		expect(t, r, doctor.Info, "works at the login screen, but sudo still asks for a password")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo pam-auth-update --enable fprintd" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("enrolled on Fedora without the authselect feature", func(t *testing.T) {
+		cmds := map[string]string{"authselect current": "Profile ID: local\n"}
+		for k, v := range enrolled {
+			cmds[k] = v
+		}
+		f := fpReader(cmds)
+		delete(f.Files, "/etc/pam.d/common-auth")
+		r := run(t, Fingerprint, f, &doctor.Host{ID: "fedora", PackageMgr: "dnf", User: "alex"})
+		expect(t, r, doctor.Info, "Your fingerprint is saved, but nothing asks for it")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo authselect enable-feature with-fingerprint && sudo authselect apply-changes" {
+			t.Errorf("fix = %q", c)
+		}
 	})
 	t.Run("apt installs the PAM module too", func(t *testing.T) {
 		r := run(t, Fingerprint, fpReader(nil), h)

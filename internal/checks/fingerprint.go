@@ -95,6 +95,9 @@ func runFingerprint(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 			Fixes:   []doctor.Fix{{Title: "Add your right index finger", Command: "fprintd-enroll"}},
 		}}
 	case strings.Contains(text, "#0:"):
+		if f, off := fingerprintPAM(s); off {
+			return []doctor.Finding{f}
+		}
 		return []doctor.Finding{{Status: doctor.OK, Title: "Fingerprint login is set up on " + what}}
 	}
 	return []doctor.Finding{{
@@ -104,4 +107,38 @@ func runFingerprint(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 		Fixes:    []doctor.Fix{{Title: "Restart the fingerprint service", Command: "sudo systemctl restart fprintd", NeedsRoot: true}},
 		Evidence: []string{strings.TrimSpace(firstLineOf(text))},
 	}}
+}
+
+// fingerprintPAM reports a saved finger that sudo and the password prompts
+// never ask for. GDM has its own gdm-fingerprint stack, so the login screen
+// can work while sudo doesn't.
+func fingerprintPAM(s sys.System) (doctor.Finding, bool) {
+	for _, dir := range []string{"/etc/pam.d/", "/usr/lib/pam.d/"} {
+		for _, f := range []string{"common-auth", "system-auth", "sudo", "system-local-login", "fingerprint-auth"} {
+			if strings.Contains(readTrim(s, dir+f), "pam_fprintd") {
+				return doctor.Finding{}, false
+			}
+		}
+	}
+	var fix doctor.Fix
+	switch {
+	case s.Has("pam-auth-update"):
+		fix = doctor.Fix{Title: "Turn on fingerprint for sudo and logins", Command: "sudo pam-auth-update --enable fprintd", NeedsRoot: true}
+	case s.Has("authselect"):
+		fix = doctor.Fix{Title: "Turn on fingerprint for sudo and logins", Command: "sudo authselect enable-feature with-fingerprint && sudo authselect apply-changes", NeedsRoot: true}
+	case s.Has("pam-config"):
+		fix = doctor.Fix{Title: "Turn on fingerprint for sudo and logins", Command: "sudo pam-config -a --fprintd", NeedsRoot: true}
+	default:
+		fix = doctor.Fix{Title: "Add \"auth sufficient pam_fprintd.so\" as the first auth line of /etc/pam.d/sudo", URL: "https://wiki.archlinux.org/title/Fprint#Configuration"}
+	}
+	title := "Your fingerprint is saved, but nothing asks for it"
+	if readTrim(s, "/etc/pam.d/gdm-fingerprint") != "" || readTrim(s, "/usr/lib/pam.d/gdm-fingerprint") != "" {
+		title = "Your fingerprint works at the login screen, but sudo still asks for a password"
+	}
+	return doctor.Finding{
+		Status:  doctor.Info,
+		Title:   title,
+		Explain: "Fingerprint use is switched on per program in the system's login settings (PAM), and it isn't on for sudo or the password prompts here.",
+		Fixes:   []doctor.Fix{fix},
+	}, true
 }
