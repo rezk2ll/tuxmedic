@@ -350,6 +350,10 @@ var packages = map[string]map[string]string{
 		"apt": "exfat-fuse", "dnf": "fuse-exfat", "pacman": "exfatprogs",
 		"zypper": "fuse-exfat", "apk": "fuse-exfat", "xbps": "fuse-exfat",
 	},
+	"emoji-font": {
+		"apt": "fonts-noto-color-emoji", "dnf": "google-noto-color-emoji-fonts", "pacman": "noto-fonts-emoji",
+		"zypper": "noto-coloremoji-fonts", "apk": "font-noto-emoji", "xbps": "noto-fonts-emoji",
+	},
 }
 
 func installFix(h *doctor.Host, need string) doctor.Fix {

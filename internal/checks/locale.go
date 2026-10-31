@@ -32,6 +32,28 @@ func normLocale(l string) string {
 }
 
 func runLocale(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	return append(languages(ctx, s, h), emojiFont(ctx, s, h)...)
+}
+
+// emojiFont looks for a font that declares emoji (fontconfig's und-zsye).
+// A charset query isn't enough: DejaVu has a few black-and-white smileys.
+func emojiFont(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Desktop == "" || !s.Has("fc-list") {
+		return nil
+	}
+	out, err := s.Run(ctx, "fc-list", ":lang=und-zsye", "family")
+	if err != nil || strings.TrimSpace(string(out)) != "" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Info,
+		Title:   "Emoji show up as empty boxes: no emoji font is installed",
+		Explain: "Chat apps, websites and the terminal need a font with emoji. Without one, each emoji is drawn as a box or a question mark.",
+		Fixes:   []doctor.Fix{installFix(h, "emoji-font"), {Title: "Then close and reopen the apps that show boxes"}},
+	}}
+}
+
+func languages(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	if !s.Has("locale") {
 		return []doctor.Finding{{Status: doctor.Skipped, Title: "Can't list the installed languages (the locale command is missing)"}}
 	}

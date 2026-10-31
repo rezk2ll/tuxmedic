@@ -47,6 +47,23 @@ func TestLocale(t *testing.T) {
 		f := &sys.Fake{Commands: map[string]string{"locale -a": installed + "en_US\nen_US.iso88591\n"}, Env: map[string]string{"LANG": "en_US.ISO-8859-1"}}
 		expect(t, run(t, Locale, f, nil), doctor.Info, "doesn't use UTF-8 (en_US.ISO-8859-1)")
 	})
+	t.Run("no emoji font", func(t *testing.T) {
+		f := fake(map[string]string{"LANG": "en_US.UTF-8"})
+		f.Commands["fc-list :lang=und-zsye family"] = ""
+		r := run(t, Locale, f, &doctor.Host{ID: "arch", PackageMgr: "pacman", Desktop: "KDE"})
+		expect(t, r, doctor.Info, "Emoji show up as empty boxes")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo pacman -S noto-fonts-emoji" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("emoji font installed", func(t *testing.T) {
+		f := fake(map[string]string{"LANG": "en_US.UTF-8"})
+		f.Commands["fc-list :lang=und-zsye family"] = "Noto Color Emoji\n"
+		r := run(t, Locale, f, &doctor.Host{ID: "arch", PackageMgr: "pacman", Desktop: "KDE"})
+		if len(r.Findings) != 1 || r.Status != doctor.OK {
+			t.Errorf("findings = %+v", r.Findings)
+		}
+	})
 	t.Run("no locale command", func(t *testing.T) {
 		expect(t, run(t, Locale, &sys.Fake{}, nil), doctor.Skipped, "locale command is missing")
 	})
