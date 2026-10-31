@@ -10,7 +10,7 @@ import (
 func All() []doctor.Check {
 	cs := []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Battery, Disk, Memory, Thermal,
-		Drivers, Sleep, Bluetooth, Updates, Boot, Apps, Permissions, Clock,
+		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Permissions, Clock,
 	}
 	for i := range cs {
 		cs[i].Keywords = strings.Fields(keywords[cs[i].ID])
@@ -42,6 +42,8 @@ var keywords = map[string]string{
 	"bluetooth": "bluetooth pair pairing paired airpods earbuds buds controller gamepad mouse keyboard speaker",
 	"updates": "update updates updating upgrade upgrading install installing package packages apt dnf pacman " +
 		"zypper lock locked dpkg held software store",
+	"changes": "changed change since yesterday week worked stopped broke broken after update updated upgrade " +
+		"kernel suddenly",
 	"boot": "boot booting startup start starting slow login services service failed",
 	"apps": "flatpak snap screenshare screensharing share sharing portal wayland obs dialog open save sandbox " +
 		"screenshot",
