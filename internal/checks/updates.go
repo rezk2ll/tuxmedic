@@ -92,7 +92,7 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 // booted one, which it lists first, and its version as " (41.20261030.0)".
 // endOfLife reads the release dates distro-info-data ships on Ubuntu,
 // Debian and their derivatives, so no date is hard-coded here. Mint,
-// elementary and Pop!_OS follow the Ubuntu release in UBUNTU_CODENAME.
+// Mint and Pop!_OS follow the Ubuntu release in UBUNTU_CODENAME.
 func endOfLife(s sys.System) []doctor.Finding {
 	osr, err := s.ReadFile("/etc/os-release")
 	if err != nil {
