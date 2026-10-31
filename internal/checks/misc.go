@@ -261,10 +261,44 @@ func runSleep(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 	if h.Laptop {
 		fs = append(fs, lidSwitch(s, h)...)
 	}
+	fs = append(fs, hibernateFailed(ctx, s)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Sleep worked every time since startup"})
 	}
 	return fs
+}
+
+// hibernateFailed explains the two refusals that leave a clear log line:
+// Secure Boot's lockdown, and no swap big enough to hold memory.
+func hibernateFailed(ctx context.Context, s sys.System) []doctor.Finding {
+	es, err := journal(ctx, s, "--since", "-7d", "-p", "0..4", "-g", "hibernat")
+	if err != nil {
+		return nil
+	}
+	for i := len(es) - 1; i >= 0; i-- {
+		m := es[i].Message
+		switch {
+		case strings.Contains(m, "hibernation is restricted"):
+			return []doctor.Finding{{
+				Status: doctor.Warn,
+				Title:  "Hibernate is blocked because Secure Boot is on",
+				Explain: "With Secure Boot, Linux locks down features that could be used to change the running system, and resuming from hibernation is one of them. " +
+					"Sleep still works. Hibernation needs Secure Boot switched off in the firmware settings.",
+				Fixes:    []doctor.Fix{{Title: "Use sleep instead, or turn off Secure Boot in the firmware settings", Command: "systemctl reboot --firmware-setup"}},
+				Evidence: []string{firstLineOf(m)},
+			}}
+		case strings.Contains(m, "swap space for hibernation") || strings.Contains(m, "location to hibernate to"):
+			return []doctor.Finding{{
+				Status: doctor.Warn,
+				Title:  "Hibernate failed: there's no swap big enough to hold your memory",
+				Explain: "Hibernating saves everything in memory to swap on the disk. The swap here is missing or smaller than what's in use, " +
+					"and zram doesn't count because it lives in memory too.",
+				Fixes:    []doctor.Fix{{Title: "Make a swap file at least as large as your memory", URL: "https://wiki.archlinux.org/title/Power_management/Suspend_and_hibernate#Hibernation"}},
+				Evidence: []string{firstLineOf(m)},
+			}}
+		}
+	}
+	return nil
 }
 
 // lidSwitch reads logind's lid setting the way logind does: main files, then
