@@ -73,14 +73,20 @@ signs:
     args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
     artifacts: checksum
 
+# Release notes are the annotated tag's message, written by hand.
 changelog:
-  use: github
-  filters:
-    exclude:
-      - "^chore\\(deps\\)"
-      - "^Merge "
+  disable: true
 
 release:
   prerelease: auto
+  header: "{{ .TagBody }}"
   footer: |
-    Verify the download: `cosign verify-blob --bundle checksums.txt.sigstore.json --certificate-identity-regexp 'https://github.com/rezk2ll/tuxmedic/' --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt`, then `sha256sum --ignore-missing -c checksums.txt`.
+    ## Verify the download
+
+    ```sh
+    cosign verify-blob --bundle checksums.txt.sigstore.json \
+      --certificate-identity-regexp 'https://github.com/rezk2ll/tuxmedic/' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    sha256sum --ignore-missing -c checksums.txt
+    ```
