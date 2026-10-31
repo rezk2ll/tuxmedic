@@ -168,6 +168,46 @@ func brokenIPv6(ctx context.Context, s sys.System, h *doctor.Host) *doctor.Findi
 	return f
 }
 
+// unmanagedNIC catches a real network adapter NetworkManager was told to
+// leave alone, usually because /etc/network/interfaces or netplan still
+// lists it from an install done over a cable. The desktop then can't
+// connect it.
+func unmanagedNIC(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Desktop == "" || h.Network != "NetworkManager" || !s.Has("nmcli") {
+		return nil
+	}
+	out, err := s.Run(ctx, "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device")
+	if err != nil {
+		return nil
+	}
+	var fs []doctor.Finding
+	ifaces, _ := s.ReadFile("/etc/network/interfaces")
+	for _, l := range strings.Split(string(out), "\n") {
+		f := strings.Split(l, ":")
+		if len(f) != 3 || f[2] != "unmanaged" || f[1] != "wifi" && f[1] != "ethernet" || !s.Exists("/sys/class/net/"+f[0]+"/device") {
+			continue
+		}
+		kind := "cable"
+		if f[1] == "wifi" {
+			kind = "Wi-Fi"
+		}
+		fd := doctor.Finding{
+			Status: doctor.Warn,
+			Title:  "The " + kind + " adapter " + f[0] + " is set to be ignored by the network settings",
+			Explain: "NetworkManager, which the desktop's network menu talks to, was told not to manage this adapter. " +
+				"So it doesn't show up in the network menu, or shows as \"unmanaged\" and never connects.",
+			Fixes:    []doctor.Fix{{Title: "Let NetworkManager manage it until the next restart", Command: "nmcli device set " + f[0] + " managed yes"}},
+			Evidence: []string{l},
+		}
+		if regexp.MustCompile(`(?m)^\s*(auto|allow-hotplug|iface)\s+` + regexp.QuoteMeta(f[0]) + `\b`).Match(ifaces) {
+			fd.Explain += " It's listed in /etc/network/interfaces, which takes it away from NetworkManager."
+			fd.Fixes = append(fd.Fixes, doctor.Fix{Title: "To keep it: remove or comment out the " + f[0] + " lines in /etc/network/interfaces, then restart", Command: "sudoedit /etc/network/interfaces", NeedsRoot: true})
+		}
+		fs = append(fs, fd)
+	}
+	return fs
+}
+
 // unsetWifiCountry catches Wi-Fi left on the "world" rules (country 00),
 // which allow only the channels legal everywhere: networks on the other
 // 5 GHz channels stay invisible. Adapters that manage their own rules
@@ -256,6 +296,7 @@ func runNetwork(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	if f, blocked := rfkillWifi(s); blocked {
 		fs = append(fs, f)
 	}
+	fs = append(fs, unmanagedNIC(ctx, s, h)...)
 	// Containers and VMs see a virtual network, never the laptop's Wi-Fi card.
 	if h.Laptop && !hasWifi && !h.Container && h.Virtual == "" {
 		f := doctor.Finding{

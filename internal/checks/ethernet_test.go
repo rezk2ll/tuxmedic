@@ -1,11 +1,34 @@
 package checks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 )
+
+func TestUnmanagedNIC(t *testing.T) {
+	h := &doctor.Host{Desktop: "GNOME", Network: "NetworkManager"}
+	devs := "lo:loopback:connected (externally)\ndocker0:bridge:unmanaged\nveth1a2b:ethernet:unmanaged\n" +
+		"wlp2s0:wifi:disconnected\nenp3s0:ethernet:unmanaged\n"
+	fake := &sys.Fake{
+		Files: files("/sys/class/net/wlp2s0/device/uevent", "", "/sys/class/net/enp3s0/device/uevent", "",
+			"/etc/network/interfaces", "source /etc/network/interfaces.d/*\nauto lo\niface lo inet loopback\nallow-hotplug enp3s0\niface enp3s0 inet dhcp\n"),
+		Commands: map[string]string{"nmcli -t -f DEVICE,TYPE,STATE device": devs},
+	}
+	fs := unmanagedNIC(context.Background(), fake, h)
+	if len(fs) != 1 || fs[0].Title != "The cable adapter enp3s0 is set to be ignored by the network settings" || len(fs[0].Fixes) != 2 {
+		t.Fatalf("findings = %+v", fs)
+	}
+	delete(fake.Files, "/etc/network/interfaces")
+	if fs := unmanagedNIC(context.Background(), fake, h); len(fs) != 1 || len(fs[0].Fixes) != 1 {
+		t.Errorf("without interfaces file: %+v", fs)
+	}
+	if fs := unmanagedNIC(context.Background(), fake, &doctor.Host{Network: "NetworkManager"}); len(fs) != 0 {
+		t.Errorf("server: %+v", fs)
+	}
+}
 
 func TestUnsetWifiCountry(t *testing.T) {
 	const d = "/sys/class/net/wlp2s0/"
