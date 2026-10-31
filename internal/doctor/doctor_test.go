@@ -67,3 +67,34 @@ func TestProbe(t *testing.T) {
 		t.Errorf("host: %+v", h)
 	}
 }
+
+func TestPackageManagerOnImageBasedSystems(t *testing.T) {
+	tests := []struct {
+		name string
+		fake *sys.Fake
+		want string
+	}{
+		{"silverblue", &sys.Fake{
+			Files:    map[string]string{"/run/ostree-booted": ""},
+			Commands: map[string]string{"dnf --version": "", "rpm-ostree --version": ""},
+		}, "rpm-ostree"},
+		{"fedora with rpm-ostree installed but not booted from it", &sys.Fake{
+			Commands: map[string]string{"dnf --version": "", "rpm-ostree --version": ""},
+		}, "dnf"},
+		{"aeon", &sys.Fake{
+			Files:    map[string]string{"/proc/mounts": "/dev/vda3 / btrfs ro,relatime 0 0\n"},
+			Commands: map[string]string{"zypper --version": "", "transactional-update --version": ""},
+		}, "transactional-update"},
+		{"tumbleweed with transactional-update", &sys.Fake{
+			Files:    map[string]string{"/proc/mounts": "/dev/vda3 / btrfs rw,relatime 0 0\n"},
+			Commands: map[string]string{"zypper --version": "", "transactional-update --version": ""},
+		}, "zypper"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := packageManager(tt.fake); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

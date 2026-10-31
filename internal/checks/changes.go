@@ -175,6 +175,10 @@ func downgradeFix(h *doctor.Host, c pkgChange) (doctor.Fix, bool) {
 	switch h.PackageMgr {
 	case "dnf":
 		return doctor.Fix{Title: "Go back to the previous version of " + c.pkg, Command: "sudo dnf downgrade " + c.pkg, NeedsRoot: true}, true
+	case "rpm-ostree":
+		return doctor.Fix{Title: "Go back to the whole system as it was before the last update, then restart", Command: "sudo rpm-ostree rollback", NeedsRoot: true}, true
+	case "transactional-update":
+		return doctor.Fix{Title: "Restart and pick the previous snapshot in the boot menu; if it works, make it stay with transactional-update rollback"}, true
 	case "pacman":
 		if c.from != "" {
 			return doctor.Fix{

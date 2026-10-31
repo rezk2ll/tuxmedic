@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -50,6 +51,15 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		fs = append(fs, aptHealth(s)...)
 	case "pacman":
 		fs = append(fs, pacmanHealth(s)...)
+	case "rpm-ostree":
+		if v, ok := stagedDeployment(ctx, s); ok {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   "An update is ready: restart to use it" + v,
+				Explain: "This system installs updates as a complete new version next to the current one. Nothing changes until you restart, and the old version stays in the boot menu in case the new one has a problem.",
+				Fixes:   []doctor.Fix{{Title: "Restart the computer"}},
+			})
+		}
 	}
 
 	if dirs, _ := s.Glob(modules + "/*"); len(dirs) > 6 && h.Like("debian", "ubuntu") {
@@ -65,6 +75,25 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "No pending restart and the package manager is healthy"})
 	}
 	return fs
+}
+
+// stagedDeployment reports whether rpm-ostree has a newer deployment than the
+// booted one, which it lists first, and its version as " (41.20261030.0)".
+func stagedDeployment(ctx context.Context, s sys.System) (string, bool) {
+	out, err := s.Run(ctx, "rpm-ostree", "status", "--json")
+	var st struct {
+		Deployments []struct {
+			Booted  bool   `json:"booted"`
+			Version string `json:"version"`
+		} `json:"deployments"`
+	}
+	if err != nil || json.Unmarshal(out, &st) != nil || len(st.Deployments) < 2 || st.Deployments[0].Booted {
+		return "", false
+	}
+	if v := st.Deployments[0].Version; v != "" {
+		return " (" + v + ")", true
+	}
+	return "", true
 }
 
 func rebootRequired(ctx context.Context, s sys.System) (bool, []string) {

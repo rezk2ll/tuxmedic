@@ -132,6 +132,8 @@ func missingDriver(d pciDev, h *doctor.Host) doctor.Finding {
 			f.Fixes = append(f.Fixes, doctor.Fix{Title: "Install the Broadcom driver", Command: "sudo apt install bcmwl-kernel-source", NeedsRoot: true})
 		case "dnf":
 			f.Fixes = append(f.Fixes, doctor.Fix{Title: "Install the Broadcom driver from RPM Fusion", Command: "sudo dnf install broadcom-wl", NeedsRoot: true})
+		case "rpm-ostree":
+			f.Fixes = append(f.Fixes, doctor.Fix{Title: "Add the Broadcom driver from RPM Fusion, then restart", Command: "sudo rpm-ostree install broadcom-wl", NeedsRoot: true})
 		case "pacman":
 			f.Fixes = append(f.Fixes, doctor.Fix{Title: "Install the Broadcom driver", Command: "sudo pacman -S broadcom-wl-dkms", NeedsRoot: true})
 		}

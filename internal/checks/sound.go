@@ -353,7 +353,11 @@ var packages = map[string]map[string]string{
 }
 
 func installFix(h *doctor.Host, need string) doctor.Fix {
-	pkg := packages[need][h.PackageMgr]
+	family := map[string]string{"rpm-ostree": "dnf", "transactional-update": "zypper"}[h.PackageMgr]
+	if family == "" {
+		family = h.PackageMgr
+	}
+	pkg := packages[need][family]
 	if pkg == "" {
 		pkg = need
 	}
@@ -378,6 +382,10 @@ func installFix(h *doctor.Host, need string) doctor.Fix {
 		cmd = "sudo xbps-install " + pkg
 	case "nix":
 		return doctor.Fix{Title: "Add " + pkg + " to your NixOS configuration and rebuild", URL: "https://search.nixos.org/packages?query=" + pkg}
+	case "rpm-ostree":
+		return doctor.Fix{Title: "Add " + pkg + " to the system, then restart to use it", Command: "sudo rpm-ostree install " + pkg, NeedsRoot: true}
+	case "transactional-update":
+		return doctor.Fix{Title: "Add " + pkg + " to the system, then restart to use it", Command: "sudo transactional-update pkg install " + pkg, NeedsRoot: true}
 	}
 	if cmd == "" {
 		return doctor.Fix{Title: "Install the " + pkg + " package with your package manager"}

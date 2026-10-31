@@ -76,7 +76,7 @@ The packages and the install script add `man tuxmedic` and tab completion for ba
 
 ## Requirements
 
-- Any Linux distro. CI installs and runs it on Ubuntu, Debian, Fedora, Arch, openSUSE, Alpine and Void. Checks that need systemd say so and step aside on systems without it.
+- Any Linux distro. CI installs and runs it on Ubuntu, Debian, Fedora, Arch, openSUSE, Alpine and Void. Checks that need systemd say so and step aside on systems without it. On image-based systems (Silverblue, Kinoite, Bazzite, Aeon, MicroOS) the fixes use rpm-ostree or transactional-update, and NixOS gets a pointer to the package instead of an install command.
 - Any terminal, from 40×10 up. On the Linux console (`TERM=linux`) or with `--ascii`, it uses plain ASCII. When the output isn't a terminal, it prints plain text.
 - No root. Run it as yourself. To see past crashes, your user needs to read the system log: many distros allow that already, otherwise tuxmedic tells you which group to join. `sudo tuxmedic` adds a few checks that need root, such as SMART on drives UDisks can't read.
 

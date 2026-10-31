@@ -3,6 +3,7 @@ package doctor
 import (
 	"bufio"
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/sys"
@@ -20,7 +21,7 @@ type Host struct {
 	Session     string // wayland, x11, tty
 	SoundServer string // pipewire, pulseaudio, alsa
 	Network     string // NetworkManager, iwd, connman, systemd-networkd
-	PackageMgr  string // apt, dnf, pacman, zypper, apk, xbps, nix, emerge
+	PackageMgr  string // apt, dnf, pacman, zypper, apk, xbps, nix, emerge, rpm-ostree, transactional-update
 	Laptop      bool
 	Virtual     string // empty on bare metal
 	Container   bool
@@ -132,13 +133,32 @@ func networkStack(s sys.System) string {
 	return ""
 }
 
+// packageManager names the tool that installs software on the host. Image-based
+// systems (Silverblue, Bazzite, Aeon, MicroOS) also ship dnf or zypper, but
+// those can't change the read-only system there, so they're checked first.
 func packageManager(s sys.System) string {
+	if s.Exists("/run/ostree-booted") && s.Has("rpm-ostree") {
+		return "rpm-ostree"
+	}
+	if s.Has("transactional-update") && rootReadOnly(s) {
+		return "transactional-update"
+	}
 	for _, pm := range []string{"apt", "dnf", "pacman", "zypper", "apk", "xbps-install", "emerge", "nix-env", "eopkg", "swupd"} {
 		if s.Has(pm) {
 			return strings.TrimSuffix(strings.TrimSuffix(pm, "-install"), "-env")
 		}
 	}
 	return ""
+}
+
+func rootReadOnly(s sys.System) bool {
+	b, _ := s.ReadFile("/proc/mounts")
+	for _, line := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(line); len(f) >= 4 && f[1] == "/" {
+			return slices.Contains(strings.Split(f[3], ","), "ro")
+		}
+	}
+	return false
 }
 
 // isLaptop uses the SMBIOS chassis type; a battery alone is not enough because
