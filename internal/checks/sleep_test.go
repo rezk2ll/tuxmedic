@@ -51,6 +51,15 @@ func TestSleep(t *testing.T) {
 		})
 		expect(t, run(t, Sleep, f, laptop), doctor.OK, "Sleep worked")
 	})
+	t.Run("docked lid suspends", func(t *testing.T) {
+		f := base(map[string]string{"/etc/systemd/logind.conf.d/50-dock.conf": "[Login]\nHandleLidSwitchDocked=suspend\n"})
+		r := run(t, Sleep, f, &doctor.Host{ID: "fedora", Laptop: true, Desktop: "XFCE"})
+		expect(t, r, doctor.Info, "even with a monitor plugged in")
+		if c := r.Findings[0].Fixes[0].Command; !strings.Contains(c, "HandleLidSwitchDocked=ignore") {
+			t.Errorf("fix = %q", c)
+		}
+		expect(t, run(t, Sleep, f, &doctor.Host{ID: "fedora", Laptop: true, Desktop: "GNOME"}), doctor.OK, "Sleep worked")
+	})
 	t.Run("KDE handles the lid itself", func(t *testing.T) {
 		f := base(map[string]string{"/etc/systemd/logind.conf": "[Login]\nHandleLidSwitch=ignore\n"})
 		expect(t, run(t, Sleep, f, &doctor.Host{ID: "arch", Laptop: true, Desktop: "KDE"}), doctor.OK, "Sleep worked")

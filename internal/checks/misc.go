@@ -370,13 +370,32 @@ func lidSwitch(s sys.System, h *doctor.Host) []doctor.Finding {
 		sort.Strings(ds)
 		files = append(files, ds...)
 	}
-	action, from := "", ""
+	action, from, docked, dockedFrom := "", "", "", ""
 	for _, f := range files {
 		for _, line := range strings.Split(readTrim(s, f), "\n") {
 			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "HandleLidSwitch="); ok {
 				action, from = strings.TrimSpace(v), f
 			}
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "HandleLidSwitchDocked="); ok {
+				docked, dockedFrom = strings.TrimSpace(v), f
+			}
 		}
+	}
+	// GNOME keeps the laptop awake with a monitor plugged in whatever
+	// logind says, so the docked setting only matters elsewhere.
+	if (docked == "suspend" || docked == "hibernate" || docked == "hybrid-sleep" || docked == "suspend-then-hibernate" || docked == "poweroff") &&
+		!strings.Contains(strings.ToLower(h.Desktop), "gnome") {
+		return []doctor.Finding{{
+			Status:  doctor.Info,
+			Title:   "Closing the lid puts the laptop to sleep even with a monitor plugged in",
+			Explain: "The login manager is set to " + docked + " when the lid closes while a monitor or dock is connected, so you can't use the laptop closed on a desk.",
+			Fixes: []doctor.Fix{{
+				Title:     "Stay awake when a monitor is plugged in (applies after a restart)",
+				Command:   "sudo mkdir -p /etc/systemd/logind.conf.d && printf '[Login]\\nHandleLidSwitchDocked=ignore\\n' | sudo tee /etc/systemd/logind.conf.d/90-lid-docked.conf",
+				NeedsRoot: true,
+			}},
+			Evidence: []string{dockedFrom + ": HandleLidSwitchDocked=" + docked},
+		}}
 	}
 	if action != "ignore" && action != "lock" {
 		return nil
