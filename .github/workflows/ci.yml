@@ -83,29 +83,18 @@ jobs:
           - { image: "opensuse/tumbleweed", install: "zypper --non-interactive install --allow-unsigned-rpm ./pkg/*.x86_64.rpm" }
           - { image: "archlinux:latest", install: "pacman -U --noconfirm ./pkg/*-x86_64.pkg.tar.zst" }
           - { image: "alpine:latest", install: "apk add --allow-untrusted ./pkg/*_x86_64.apk" }
-          - { image: "ghcr.io/void-linux/void-glibc:latest", install: "tar -xzf ./pkg/*_linux_amd64.tar.gz -C /usr/local/bin tuxmedic" }
-    container: ${{ matrix.image }}
+          - { image: "ghcr.io/void-linux/void-glibc:latest", install: "install -m 0755 ./pkg/bin/tuxmedic /usr/local/bin/tuxmedic" }
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: pkg
-      - name: Install
-        run: ${{ matrix.install }}
-      - name: Run every check
-        run: |
-          set +e
-          tuxmedic check --verbose > out.txt 2>&1
-          code=$?
-          cat out.txt
-          [ "$code" -le 1 ] || { echo "unexpected exit code $code"; exit 1; }
-          if grep -q "This check crashed" out.txt; then exit 1; fi
-      - name: JSON and report
-        run: |
-          set +e
-          tuxmedic check --json > out.json
-          [ "$?" -le 1 ] || exit 1
-          grep -q '"checks"' out.json
-          tuxmedic report > report.md
-          [ "$?" -le 1 ] || exit 1
-          grep -q "tuxmedic report" report.md
+      - name: Unpack the static binary for images without a package format
+        run: mkdir pkg/bin && tar -xzf pkg/*_linux_amd64.tar.gz -C pkg/bin tuxmedic
+      # docker run instead of a job container: some images, like Void's,
+      # can't run the Node.js that job containers need.
+      - name: Install and run every check
+        run: >-
+          docker run --rm -v "$PWD:/src" -w /src "${{ matrix.image }}"
+          sh -c '${{ matrix.install }} && sh .github/smoke.sh'
