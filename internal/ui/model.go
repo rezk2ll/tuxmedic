@@ -66,8 +66,11 @@ type Model struct {
 	checks  []doctor.Check
 	reports map[string]doctor.Report
 	running map[string]bool
-	started time.Time
-	elapsed time.Duration
+	// verifying holds a check's report from before a fix ran, until the
+	// re-check after it says whether the fix worked.
+	verifying map[string]doctor.Report
+	started   time.Time
+	elapsed   time.Duration
 
 	width, height int
 	dark          bool
@@ -111,7 +114,8 @@ func New(s sys.System, h *doctor.Host, checks []doctor.Check, o Options) *Model 
 	m := &Model{
 		ctx: ctx, cancel: cancel, sys: s, host: h, opts: o,
 		checks: ordered(checks), reports: map[string]doctor.Report{}, running: map[string]bool{},
-		evidence: map[string]bool{}, dark: true,
+		verifying: map[string]doctor.Report{},
+		evidence:  map[string]bool{}, dark: true,
 		detail: viewport.New(),
 	}
 	m.theme = newTheme(true, o.ASCII)
@@ -199,6 +203,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.elapsed = time.Since(m.started)
 		}
 		m.refreshDetail()
+		if before, ok := m.verifying[msg.r.CheckID]; ok {
+			delete(m.verifying, msg.r.CheckID)
+			return m, m.notify(verdict(before, msg.r))
+		}
 		return m, nil
 
 	case tickMsg:
@@ -224,7 +232,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, tea.Batch(cmd, m.notify("The command failed: "+msg.err.Error()))
 		}
-		return m, tea.Batch(cmd, m.notify("Done. Checking again…"))
+		if c != nil {
+			m.verifying[c.ID] = m.reports[c.ID]
+		}
+		return m, tea.Batch(cmd, m.notify("Done. Checking whether it worked…"))
 
 	case tea.MouseWheelMsg:
 		m.wheel(msg.Mouse())
@@ -389,6 +400,31 @@ func (m *Model) current() *doctor.Check {
 		return nil
 	}
 	return &m.checks[m.entries[m.sel].check]
+}
+
+func problems(r doctor.Report) int {
+	n := 0
+	for _, f := range r.Findings {
+		if f.Status >= doctor.Warn {
+			n++
+		}
+	}
+	return n
+}
+
+// verdict tells the user whether the fix they just ran worked, judged by
+// re-running the check: the one question they have after running it.
+func verdict(before, after doctor.Report) string {
+	b, a := problems(before), problems(after)
+	switch {
+	case b > 0 && a == 0:
+		return "Fixed: " + after.Name + " looks good now"
+	case a < b:
+		return fmt.Sprintf("Better: %d of %d problems fixed", b-a, b)
+	case a > b:
+		return "Something new came up, see the details"
+	}
+	return "No change yet. Some fixes need a restart; otherwise try the next fix"
 }
 
 func (m *Model) checkByID(id string) *doctor.Check {

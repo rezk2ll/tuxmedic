@@ -151,3 +151,28 @@ func TestQuitCancelsRunningChecks(t *testing.T) {
 		t.Error("q should quit and cancel the checks' context")
 	}
 }
+
+func TestFixIsVerified(t *testing.T) {
+	m := newTestModel(t, false)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	still := m.reports["sound"]
+
+	m.Update(fixDone{checkID: "sound"})
+	if !strings.Contains(m.toast, "Checking whether it worked") {
+		t.Fatalf("toast after fix = %q", m.toast)
+	}
+	m.Update(reportMsg{still})
+	if !strings.Contains(m.toast, "No change yet") {
+		t.Errorf("toast for an unchanged check = %q", m.toast)
+	}
+
+	m.Update(fixDone{checkID: "sound"})
+	m.Update(reportMsg{doctor.Report{CheckID: "sound", Name: "Sound", Status: doctor.OK,
+		Findings: []doctor.Finding{{Status: doctor.OK, Title: "Sound plays"}}}})
+	if m.toast != "Fixed: Sound looks good now" {
+		t.Errorf("toast for a fixed check = %q", m.toast)
+	}
+	if len(m.verifying) != 0 {
+		t.Errorf("verifying not cleared: %v", m.verifying)
+	}
+}
