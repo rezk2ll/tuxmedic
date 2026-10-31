@@ -2,6 +2,8 @@ package checks
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
@@ -74,6 +76,24 @@ func runGames(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 			f.Fixes = []doctor.Fix{{Title: "Install the game-devices-udev rules from the AUR", URL: "https://aur.archlinux.org/packages/game-devices-udev"}}
 		}
 		fs = append(fs, f)
+	}
+
+	// Some newer games map far more memory regions than the kernel's old
+	// default of 65530 allows and crash on load. Fedora, Ubuntu and Arch
+	// now ship 1048576; other distros don't.
+	if n, err := strconv.Atoi(readTrim(s, "/proc/sys/vm/max_map_count")); err == nil && n < 1048576 {
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Info,
+			Title:  "Some big games may crash on load: the memory map limit is low",
+			Explain: fmt.Sprintf("Games like Counter-Strike 2 and Hogwarts Legacy need more memory regions than this system allows (%d). "+
+				"They crash while loading or right after. Fedora, Ubuntu and Arch raise the limit to 1048576.", n),
+			Fixes: []doctor.Fix{{
+				Title:     "Raise the limit now and at every startup",
+				Command:   "echo 'vm.max_map_count = 1048576' | sudo tee /etc/sysctl.d/80-gamecompatibility.conf && sudo sysctl --system",
+				NeedsRoot: true,
+			}},
+			Evidence: []string{"vm.max_map_count = " + strconv.Itoa(n)},
+		})
 	}
 
 	if len(fs) == 0 {

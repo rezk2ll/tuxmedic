@@ -59,6 +59,16 @@ func TestGames(t *testing.T) {
 		f := &sys.Fake{Files: with(amd, "/usr/lib/udev/rules.d/60-steam-input.rules", ""), Commands: flatSteam}
 		expect(t, run(t, Games, f, apt), doctor.OK, "Steam (Flatpak) has the drivers it needs")
 	})
+	t.Run("low memory map limit", func(t *testing.T) {
+		rules := with(amd, "/usr/lib/udev/rules.d/60-steam-input.rules", "")
+		r := run(t, Games, &sys.Fake{Files: with(rules, "/proc/sys/vm/max_map_count", "65530\n"), Commands: flatSteam}, apt)
+		expect(t, r, doctor.Info, "the memory map limit is low")
+		if r.Findings[0].Evidence[0] != "vm.max_map_count = 65530" {
+			t.Errorf("evidence = %v", r.Findings[0].Evidence)
+		}
+		expect(t, run(t, Games, &sys.Fake{Files: with(rules, "/proc/sys/vm/max_map_count", "1048576\n"), Commands: flatSteam}, apt),
+			doctor.OK, "Steam (Flatpak) has the drivers it needs")
+	})
 	t.Run("nvidia beats the integrated gpu", func(t *testing.T) {
 		f := &sys.Fake{Files: map[string]string{
 			"/sys/class/drm/card0/device/uevent": "DRIVER=i915\n",
