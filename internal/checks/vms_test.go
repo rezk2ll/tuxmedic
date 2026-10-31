@@ -46,6 +46,29 @@ func TestVMs(t *testing.T) {
 			t.Errorf("evidence = %v", r.Findings[0].Evidence)
 		}
 	})
+	q := "systemctl is-active libvirtd.service libvirtd.socket virtqemud.service virtqemud.socket"
+	t.Run("libvirt installed but off", func(t *testing.T) {
+		f := fake("svm", []string{"virt-manager", "systemctl"}, "/dev/kvm", "", "/usr/lib/systemd/system/libvirtd.socket", "")
+		f.Commands[q] = "inactive\ninactive\ninactive\ninactive\n"
+		r := run(t, VMs, f, h)
+		expect(t, r, doctor.Warn, "The libvirt service is off")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo systemctl enable --now libvirtd.socket" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("libvirt not installed", func(t *testing.T) {
+		f := fake("svm", []string{"virt-manager", "systemctl"}, "/dev/kvm", "")
+		f.Commands[q] = "inactive\ninactive\ninactive\ninactive\n"
+		r := run(t, VMs, f, &doctor.Host{ID: "debian", PackageMgr: "apt", Systemd: true})
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo apt install libvirt-daemon-system" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("libvirt socket listening", func(t *testing.T) {
+		f := fake("svm", []string{"virt-manager", "systemctl"}, "/dev/kvm", "")
+		f.Commands[q] = "inactive\nactive\ninactive\ninactive\n"
+		expect(t, run(t, VMs, f, h), doctor.OK, "AMD-V")
+	})
 	t.Run("inside a VM", func(t *testing.T) {
 		expect(t, run(t, VMs, fake("", []string{"virsh"}), &doctor.Host{Virtual: "kvm"}), doctor.Skipped, "virtual machine itself")
 	})

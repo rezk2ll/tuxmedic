@@ -338,6 +338,10 @@ var packages = map[string]map[string]string{
 		"apt": "pipewire-audio", "dnf": "pipewire-pulseaudio", "pacman": "pipewire-pulse",
 		"zypper": "pipewire-pulseaudio", "apk": "pipewire-pulse", "xbps": "pipewire",
 	},
+	"libvirt": {
+		"apt": "libvirt-daemon-system", "dnf": "libvirt", "pacman": "libvirt",
+		"zypper": "libvirt", "apk": "libvirt-daemon", "xbps": "libvirt",
+	},
 	"smartmontools": {
 		"apt": "smartmontools", "dnf": "smartmontools", "pacman": "smartmontools",
 		"zypper": "smartmontools", "apk": "smartmontools", "xbps": "smartmontools",

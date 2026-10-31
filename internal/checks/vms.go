@@ -49,6 +49,9 @@ func runVMs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding 
 	if f, ok := vboxVsKVM(s, h); ok {
 		fs = append(fs, f)
 	}
+	if f, ok := libvirtOff(ctx, s, h); ok {
+		fs = append(fs, f)
+	}
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Hardware virtualization is on (" + flag + ")"})
 	}
@@ -74,6 +77,46 @@ func hasVirtFlag(s sys.System) string {
 		return ""
 	}
 	return "unknown"
+}
+
+var libvirtUnits = []string{"libvirtd.service", "libvirtd.socket", "virtqemud.service", "virtqemud.socket"}
+
+// libvirtOff catches virt-manager and GNOME Boxes' system connection with
+// no libvirt service to talk to: "Unable to connect to libvirt qemu:///system".
+func libvirtOff(ctx context.Context, s sys.System, h *doctor.Host) (doctor.Finding, bool) {
+	if !h.Systemd || !s.Has("virt-manager") && !s.Has("virsh") || !s.Has("systemctl") {
+		return doctor.Finding{}, false
+	}
+	out, _ := s.Run(ctx, "systemctl", append([]string{"is-active"}, libvirtUnits...)...)
+	states := strings.Fields(string(out))
+	if len(states) == 0 {
+		return doctor.Finding{}, false
+	}
+	for _, st := range states {
+		if st == "active" || st == "activating" {
+			return doctor.Finding{}, false
+		}
+	}
+	unit := "libvirtd.socket"
+	if s.Exists("/usr/lib/systemd/system/virtqemud.socket") && !s.Exists("/usr/lib/systemd/system/libvirtd.socket") {
+		unit = "virtqemud.socket"
+	}
+	if !s.Exists("/usr/lib/systemd/system/"+unit) && !s.Exists("/lib/systemd/system/"+unit) {
+		return doctor.Finding{
+			Status:  doctor.Warn,
+			Title:   "virt-manager has no libvirt service to connect to",
+			Explain: "virt-manager is a window onto libvirt, which runs the machines. libvirt isn't installed, so it shows \"Unable to connect to libvirt\".",
+			Fixes:   []doctor.Fix{installFix(h, "libvirt")},
+		}, true
+	}
+	return doctor.Finding{
+		Status: doctor.Warn,
+		Title:  "The libvirt service is off, so virt-manager can't connect",
+		Explain: "virt-manager is a window onto libvirt, which runs the machines. Some distros install libvirt without starting it, " +
+			"so virt-manager shows \"Unable to connect to libvirt qemu:///system\".",
+		Fixes:    []doctor.Fix{{Title: "Start libvirt now and at every startup", Command: "sudo systemctl enable --now " + unit, NeedsRoot: true}},
+		Evidence: []string{strings.Join(libvirtUnits, ", ") + ": not running"},
+	}, true
 }
 
 // vboxVsKVM catches VirtualBox failing because KVM already holds the
