@@ -350,6 +350,18 @@ var packages = map[string]map[string]string{
 		"apt": "exfat-fuse", "dnf": "fuse-exfat", "pacman": "exfatprogs",
 		"zypper": "fuse-exfat", "apk": "fuse-exfat", "xbps": "fuse-exfat",
 	},
+	"va-intel": {
+		"apt": "intel-media-va-driver", "dnf": "libva-intel-media-driver", "pacman": "intel-media-driver",
+		"zypper": "intel-media-driver", "apk": "intel-media-driver", "xbps": "intel-media-driver",
+	},
+	"va-mesa": {
+		"apt": "mesa-va-drivers", "dnf": "mesa-va-drivers", "pacman": "libva-mesa-driver",
+		"zypper": "Mesa-libva", "apk": "mesa-va-gallium", "xbps": "mesa-vaapi",
+	},
+	"va-nvidia": {
+		"apt": "nvidia-vaapi-driver", "dnf": "libva-nvidia-driver", "pacman": "libva-nvidia-driver",
+		"zypper": "nvidia-vaapi-driver", "apk": "nvidia-vaapi-driver", "xbps": "nvidia-vaapi-driver",
+	},
 	"emoji-font": {
 		"apt": "fonts-noto-color-emoji", "dnf": "google-noto-color-emoji-fonts", "pacman": "noto-fonts-emoji",
 		"zypper": "noto-coloremoji-fonts", "apk": "font-noto-emoji", "xbps": "noto-fonts-emoji",

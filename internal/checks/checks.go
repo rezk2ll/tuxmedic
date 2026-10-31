@@ -9,7 +9,7 @@ import (
 
 func All() []doctor.Check {
 	cs := []doctor.Check{
-		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Games,
+		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Video, Games,
 		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Defaults, Permissions, Locale, Clock,
 	}
 	for i := range cs {
@@ -40,6 +40,8 @@ var keywords = map[string]string{
 	"battery": "battery charge charging charger plugged power drain draining percent 80 health wear capacity",
 	"disk":    "disk disks storage space full ssd drive hdd nvme smart readonly partition cleanup clean free",
 	"memory":  "memory ram swap slow sluggish lag laggy tabs heavy freezing",
+	"video": "video videos youtube netflix twitch stutter stuttering choppy lag lagging playback 4k vaapi " +
+		"hardware acceleration decoding fans cpu",
 	"games": "game games gaming steam proton vulkan controller gamepad joystick xbox playstation dualsense " +
 		"wine lutris heroic",
 	"thermal": "hot heat heating overheat overheating temperature temperatures temp fan fans loud noisy noise " +
