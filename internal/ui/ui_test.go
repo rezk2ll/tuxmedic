@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/rezk2ll/tuxmedic/internal/checks"
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 	"github.com/rezk2ll/tuxmedic/internal/watch"
@@ -94,6 +95,36 @@ func TestViewFitsEverySize(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+// The real check list is longer than a small window: the list has to scroll
+// and keep the selected check on screen.
+func TestEveryRealCheckFitsAndScrolls(t *testing.T) {
+	h := &doctor.Host{Distro: "Debian GNU/Linux 13 (trixie)", Desktop: "GNOME", PackageMgr: "apt", Laptop: true}
+	all := checks.All()
+	for _, sz := range [][2]int{{40, 10}, {80, 24}, {120, 40}} {
+		m := New(&sys.Fake{}, h, all, Options{})
+		m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
+		for _, c := range all {
+			m.Update(reportMsg{doctor.RunOne(context.Background(), c, &sys.Fake{}, h)})
+		}
+		for range len(all) + 3 {
+			m.Update(key("down"))
+		}
+		out := m.View().Content
+		lines := strings.Split(out, "\n")
+		if len(lines) > sz[1] {
+			t.Errorf("%dx%d: %d lines", sz[0], sz[1], len(lines))
+		}
+		for i, l := range lines {
+			if w := lipgloss.Width(l); w > sz[0] {
+				t.Errorf("%dx%d: line %d is %d wide", sz[0], sz[1], i, w)
+			}
+		}
+		if last := all[len(all)-1].Name; sz[0] >= 80 && !strings.Contains(out, last) {
+			t.Errorf("%dx%d: the last check (%s) isn't on screen after scrolling to it:\n%s", sz[0], sz[1], last, out)
 		}
 	}
 }
