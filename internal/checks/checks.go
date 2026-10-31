@@ -11,6 +11,7 @@ func All() []doctor.Check {
 	cs := []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Video, Games,
 		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, VMs, Defaults, Keyring, Permissions, Locale, Clock,
+		Notifications,
 	}
 	for i := range cs {
 		cs[i].Keywords = strings.Fields(keywords[cs[i].ID])
@@ -68,4 +69,6 @@ var keywords = map[string]string{
 	"locale": "locale language languages lang utf8 utf-8 unicode accents accented characters letters question marks " +
 		"garbled perl warning setting failed",
 	"clock": "clock time date timezone dual dualboot windows ntp sync wrong hour",
+	"notifications": "notification notifications notify popup popups banner banners alert alerts disturb dnd " +
+		"messages mail slack telegram signal reminder reminders",
 }
