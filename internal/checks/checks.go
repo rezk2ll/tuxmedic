@@ -31,7 +31,8 @@ var keywords = map[string]string{
 	"camera": "camera webcam cam mic microphone video zoom teams meet skype discord call calls record recording " +
 		"voice hear",
 	"display": "monitor monitors screen screens display displays external second hdmi displayport usbc dock " +
-		"thunderbolt projector tv resolution black blank detected flicker flickering brightness backlight dim dark",
+		"thunderbolt projector tv resolution black blank detected flicker flickering brightness backlight dim dark " +
+		"yellow orange warm tint colors colours night",
 	"fingerprint": "fingerprint finger reader sensor fprintd biometric unlock login password howdy",
 	"keyboard":    "keyboard keys key typing type typed slow late delay sticky shift lag input method ibus fcitx chinese japanese korean pinyin language layout",
 	"touchpad":    "touchpad trackpad pointer cursor click clicking tap scroll scrolling gestures",

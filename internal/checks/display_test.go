@@ -52,6 +52,17 @@ func TestLowRefreshKDE(t *testing.T) {
 	}
 }
 
+func TestNightLight(t *testing.T) {
+	const q = "busctl --user get-property org.gnome.SettingsDaemon.Color /org/gnome/SettingsDaemon/Color org.gnome.SettingsDaemon.Color NightLightActive"
+	gnome := &doctor.Host{Desktop: "ubuntu:GNOME"}
+	if fs := nightLight(context.Background(), &sys.Fake{Commands: map[string]string{q: "b true\n"}}, gnome); len(fs) != 1 {
+		t.Errorf("active = %+v", fs)
+	}
+	if fs := nightLight(context.Background(), &sys.Fake{Commands: map[string]string{q: "b false\n"}}, gnome); len(fs) != 0 {
+		t.Errorf("inactive = %+v", fs)
+	}
+}
+
 func edid(name string) string {
 	b := make([]byte, 128)
 	copy(b[54:], []byte{0, 0, 0, 0xFC, 0})

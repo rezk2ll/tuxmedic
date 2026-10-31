@@ -150,6 +150,28 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 // desktops pick, at its current resolution. On X11 it asks xrandr and on
 // KDE Wayland kscreen-doctor; under other Wayland desktops xrandr only
 // sees XWayland's made-up modes.
+// nightLight answers "why does my screen look yellow": GNOME's Night Light
+// is tinting it right now.
+func nightLight(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if !strings.Contains(strings.ToLower(h.Desktop), "gnome") || !s.Has("busctl") {
+		return nil
+	}
+	out, err := s.Run(ctx, "busctl", "--user", "get-property", "org.gnome.SettingsDaemon.Color", "/org/gnome/SettingsDaemon/Color",
+		"org.gnome.SettingsDaemon.Color", "NightLightActive")
+	if err != nil || strings.TrimSpace(string(out)) != "b true" {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status:  doctor.Info,
+		Title:   "Night Light is on, which makes the screen look yellow or orange",
+		Explain: "Night Light warms the colors in the evening to be easier on the eyes. It's on a schedule, so it comes back each evening until you turn it off.",
+		Fixes: []doctor.Fix{
+			{Title: "Turn it off for tonight from the menu at the top right, or for good in Settings, under Displays"},
+			{Title: "Or turn it off for good from here", Command: "gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled false"},
+		},
+	}}
+}
+
 func lowRefresh(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
 	if h.Session == "wayland" && strings.Contains(strings.ToLower(h.Desktop), "kde") && s.Has("kscreen-doctor") {
 		return lowRefreshKDE(ctx, s)
@@ -308,6 +330,7 @@ func runDisplay(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	}
 	fs = append(fs, blurryXwayland(ctx, s, h)...)
 	fs = append(fs, lowRefresh(ctx, s, h)...)
+	fs = append(fs, nightLight(ctx, s, h)...)
 
 	if len(active) > 0 {
 		fs = append(fs, doctor.Finding{
