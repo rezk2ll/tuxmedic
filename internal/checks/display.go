@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -146,9 +147,13 @@ func blurryXwayland(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 }
 
 // lowRefresh catches a fast monitor left at 60 Hz, the default many
-// desktops pick, at its current resolution. Only on X11: under Wayland,
-// xrandr sees XWayland's made-up modes.
+// desktops pick, at its current resolution. On X11 it asks xrandr and on
+// KDE Wayland kscreen-doctor; under other Wayland desktops xrandr only
+// sees XWayland's made-up modes.
 func lowRefresh(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	if h.Session == "wayland" && strings.Contains(strings.ToLower(h.Desktop), "kde") && s.Has("kscreen-doctor") {
+		return lowRefreshKDE(ctx, s)
+	}
 	if h.Session != "x11" || !s.Has("xrandr") {
 		return nil
 	}
@@ -194,6 +199,56 @@ func lowRefresh(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 					{Title: "To keep it, pick the refresh rate in your display settings"},
 				},
 				Evidence: []string{output + ": " + strings.Join(f, " ")},
+			})
+		}
+	}
+	return fs
+}
+
+type kscreenMode struct {
+	ID      string  `json:"id"`
+	Refresh float64 `json:"refreshRate"`
+	Size    struct {
+		W int `json:"width"`
+		H int `json:"height"`
+	} `json:"size"`
+}
+
+func lowRefreshKDE(ctx context.Context, s sys.System) []doctor.Finding {
+	out, err := s.Run(ctx, "kscreen-doctor", "-j")
+	var cfg struct {
+		Outputs []struct {
+			Name          string        `json:"name"`
+			Connected     bool          `json:"connected"`
+			Enabled       bool          `json:"enabled"`
+			CurrentModeID string        `json:"currentModeId"`
+			Modes         []kscreenMode `json:"modes"`
+		} `json:"outputs"`
+	}
+	if err != nil || json.Unmarshal(out, &cfg) != nil {
+		return nil
+	}
+	var fs []doctor.Finding
+	for _, o := range cfg.Outputs {
+		i := slices.IndexFunc(o.Modes, func(m kscreenMode) bool { return m.ID == o.CurrentModeID })
+		if !o.Connected || !o.Enabled || i < 0 {
+			continue
+		}
+		cur, top, topID := o.Modes[i].Refresh, 0.0, ""
+		for _, m := range o.Modes {
+			if m.Size == o.Modes[i].Size && m.Refresh > top {
+				top, topID = m.Refresh, m.ID
+			}
+		}
+		if top >= 90 && top >= cur*1.4 {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Info,
+				Title:   fmt.Sprintf("%s runs at %.0f Hz, but it can do %.0f Hz", o.Name, cur, top),
+				Explain: "Your monitor supports a faster refresh rate, which makes scrolling, the mouse pointer and games look smoother. It's set to the slower one.",
+				Fixes: []doctor.Fix{
+					{Title: "Switch to it (kept after restarts)", Command: "kscreen-doctor output." + o.Name + ".mode." + topID},
+					{Title: "Or pick the refresh rate in System Settings, Display Configuration"},
+				},
 			})
 		}
 	}

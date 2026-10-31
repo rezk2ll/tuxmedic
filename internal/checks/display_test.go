@@ -36,6 +36,22 @@ func TestLowRefresh(t *testing.T) {
 	}
 }
 
+func TestLowRefreshKDE(t *testing.T) {
+	kde := &doctor.Host{Session: "wayland", Desktop: "KDE"}
+	cfg := `{"outputs":[
+	 {"name":"eDP-1","connected":true,"enabled":true,"currentModeId":"1",
+	  "modes":[{"id":"1","refreshRate":60.0,"size":{"width":1920,"height":1200}}]},
+	 {"name":"DP-3","connected":true,"enabled":true,"currentModeId":"4",
+	  "modes":[{"id":"4","refreshRate":59.95,"size":{"width":2560,"height":1440}},
+	           {"id":"5","refreshRate":164.8,"size":{"width":2560,"height":1440}},
+	           {"id":"6","refreshRate":240.0,"size":{"width":1920,"height":1080}}]},
+	 {"name":"HDMI-A-1","connected":false,"enabled":false,"currentModeId":"","modes":[]}]}`
+	fs := lowRefresh(context.Background(), &sys.Fake{Commands: map[string]string{"kscreen-doctor -j": cfg}}, kde)
+	if len(fs) != 1 || fs[0].Title != "DP-3 runs at 60 Hz, but it can do 165 Hz" || fs[0].Fixes[0].Command != "kscreen-doctor output.DP-3.mode.5" {
+		t.Fatalf("findings = %+v", fs)
+	}
+}
+
 func edid(name string) string {
 	b := make([]byte, 128)
 	copy(b[54:], []byte{0, 0, 0, 0xFC, 0})
