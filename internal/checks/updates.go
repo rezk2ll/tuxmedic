@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
@@ -74,6 +75,9 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 	if h.PackageMgr == "apt" {
 		fs = append(fs, deadAptSources(s)...)
 	}
+	if h.PackageMgr == "pacman" {
+		fs = append(fs, staleArch(s, h)...)
+	}
 
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "No pending restart and the package manager is healthy"})
@@ -83,6 +87,52 @@ func runUpdates(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Find
 
 // stagedDeployment reports whether rpm-ostree has a newer deployment than the
 // booted one, which it lists first, and its version as " (41.20261030.0)".
+// staleArch catches an Arch system that hasn't had a full upgrade in months.
+// Its keyring is then older than the keys that signed today's packages, and
+// the next upgrade fails with "signature is unknown trust".
+func staleArch(s sys.System, h *doctor.Host) []doctor.Finding {
+	var last time.Time
+	for _, l := range strings.Split(readTrim(s, "/var/log/pacman.log"), "\n") {
+		if !strings.Contains(l, "starting full system upgrade") || !strings.HasPrefix(l, "[") {
+			continue
+		}
+		stamp, _, _ := strings.Cut(l[1:], "]")
+		for _, layout := range []string{"2006-01-02T15:04:05-0700", "2006-01-02 15:04"} {
+			if t, err := time.Parse(layout, stamp); err == nil {
+				last = t
+				break
+			}
+		}
+	}
+	if last.IsZero() {
+		return nil
+	}
+	days := int(s.Now().Sub(last).Hours() / 24)
+	if days < 90 {
+		return nil
+	}
+	keyrings := "archlinux-keyring"
+	switch {
+	case h.ID == "manjaro" || h.Like("manjaro"):
+		keyrings += " manjaro-keyring"
+	case h.ID == "endeavouros":
+		keyrings += " endeavouros-keyring"
+	case h.ID == "cachyos":
+		keyrings += " cachyos-keyring"
+	}
+	return []doctor.Finding{{
+		Status: doctor.Info,
+		Title:  fmt.Sprintf("This system hasn't been fully updated in %d days", days),
+		Explain: "Arch-based systems move fast. After a long gap the next update often stops with \"signature is unknown trust\" or " +
+			"\"invalid or corrupted package\", because the list of trusted signing keys is older than the packages. Updating that list first avoids it.",
+		Fixes: []doctor.Fix{
+			{Title: "Update the signing keys first, then everything", Command: "sudo pacman -Sy --needed " + keyrings + " && sudo pacman -Su", NeedsRoot: true},
+			{Title: "Read the news for steps needed by updates you skipped", URL: "https://archlinux.org/news/"},
+		},
+		Evidence: []string{"last full upgrade: " + last.Format("2006-01-02")},
+	}}
+}
+
 func stagedDeployment(ctx context.Context, s sys.System) (string, bool) {
 	out, err := s.Run(ctx, "rpm-ostree", "status", "--json")
 	var st struct {

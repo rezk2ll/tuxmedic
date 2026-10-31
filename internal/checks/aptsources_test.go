@@ -3,6 +3,7 @@ package checks
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
@@ -24,6 +25,38 @@ func TestAptListName(t *testing.T) {
 			t.Errorf("%v should be skipped", tc)
 		}
 	}
+}
+
+func TestStaleArch(t *testing.T) {
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	log := "[2026-03-02T09:00:00+0100] [PACMAN] Running 'pacman -Syu'\n" +
+		"[2026-03-02T09:00:00+0100] [PACMAN] starting full system upgrade\n" +
+		"[2026-03-02T09:05:12+0100] [ALPM] upgraded mesa (25.0.1-1 -> 25.0.2-1)\n" +
+		"[2026-04-10T18:00:00+0200] [PACMAN] Running 'pacman -S htop'\n"
+	fake := func(log string) *sys.Fake {
+		return &sys.Fake{Files: map[string]string{"/var/log/pacman.log": log}, Clock: now}
+	}
+
+	t.Run("eight months without a full upgrade", func(t *testing.T) {
+		r := run(t, Updates, fake(log), &doctor.Host{ID: "arch", PackageMgr: "pacman"})
+		expect(t, r, doctor.Info, "hasn't been fully updated in 243 days")
+		if c := r.Findings[0].Fixes[0].Command; c != "sudo pacman -Sy --needed archlinux-keyring && sudo pacman -Su" {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("manjaro has its own keyring too", func(t *testing.T) {
+		r := run(t, Updates, fake(log), &doctor.Host{ID: "manjaro", IDLike: []string{"arch"}, PackageMgr: "pacman"})
+		if c := r.Findings[0].Fixes[0].Command; !strings.Contains(c, "archlinux-keyring manjaro-keyring") {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("old log format, recent upgrade", func(t *testing.T) {
+		r := run(t, Updates, fake("[2026-10-20 08:00] [PACMAN] starting full system upgrade\n"), &doctor.Host{ID: "arch", PackageMgr: "pacman"})
+		expect(t, r, doctor.OK, "healthy")
+	})
+	t.Run("no log", func(t *testing.T) {
+		expect(t, run(t, Updates, fake(""), &doctor.Host{ID: "arch", PackageMgr: "pacman"}), doctor.OK, "healthy")
+	})
 }
 
 func TestDeadAptSources(t *testing.T) {
