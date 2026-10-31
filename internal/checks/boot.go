@@ -34,6 +34,7 @@ func runBoot(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding
 	fs = append(fs, failedUnits(ctx, s, true)...)
 	fs = append(fs, bootTime(ctx, s)...)
 	fs = append(fs, missingMounts(s)...)
+	fs = append(fs, staleResume(s, h)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Everything started correctly"})
 	}
@@ -184,6 +185,58 @@ func humanSeconds(sec float64) string {
 	return fmt.Sprintf("%.1f s", sec)
 }
 
+// diskPath turns UUID=, PARTUUID= and LABEL= specs into their /dev/disk
+// link, and returns "" for anything else.
+func diskPath(spec string) string {
+	for _, k := range []struct{ prefix, dir string }{{"UUID=", "by-uuid"}, {"PARTUUID=", "by-partuuid"}, {"LABEL=", "by-label"}} {
+		if v, ok := strings.CutPrefix(spec, k.prefix); ok {
+			return "/dev/disk/" + k.dir + "/" + strings.Trim(v, `"`)
+		}
+	}
+	return ""
+}
+
+// staleResume catches a resume device (where hibernation is read back
+// from) that no longer exists, usually a swap partition removed or
+// reformatted. The initramfs waits for it at every startup.
+func staleResume(s sys.System, h *doctor.Host) []doctor.Finding {
+	for _, a := range strings.Fields(readTrim(s, "/proc/cmdline")) {
+		v, ok := strings.CutPrefix(a, "resume=")
+		if !ok || v == "none" || v == "" {
+			continue
+		}
+		if p := diskPath(v); p != "" && !s.Exists(p) {
+			fix := kernelArgRemoveFix(s, h, a)
+			if strings.Contains(a, "/") {
+				fix = doctor.Fix{Title: "Remove " + a + " from the kernel command line in your boot loader's settings, then restart"}
+			}
+			return []doctor.Finding{staleResumeFinding("kernel setting "+a, fix)}
+		}
+	}
+	const conf = "/etc/initramfs-tools/conf.d/resume"
+	if v, ok := strings.CutPrefix(readTrim(s, conf), "RESUME="); ok && v != "none" {
+		if p := diskPath(v); p != "" && !s.Exists(p) {
+			return []doctor.Finding{staleResumeFinding(conf+": RESUME="+v, doctor.Fix{
+				Title:     "Stop waiting for it",
+				Command:   "echo RESUME=none | sudo tee " + conf + " && sudo update-initramfs -u",
+				NeedsRoot: true,
+			})}
+		}
+	}
+	return nil
+}
+
+func staleResumeFinding(evidence string, fix doctor.Fix) doctor.Finding {
+	return doctor.Finding{
+		Status: doctor.Warn,
+		Title:  "Startup waits for a hibernation disk that isn't there",
+		Explain: "The system is set to look for a saved hibernation on a swap disk that no longer exists, often after a reinstall or a resized partition. " +
+			"It waits for that disk at every startup before giving up.",
+		Fixes:    []doctor.Fix{fix},
+		Evidence: []string{evidence},
+	}
+}
+
 // missingMounts finds /etc/fstab entries pointing at disks that no longer
 // exist, the classic cause of a 90-second "A start job is running" at boot.
 func missingMounts(s sys.System) []doctor.Finding {
@@ -197,18 +250,7 @@ func missingMounts(s sys.System) []doctor.Finding {
 		if len(f) < 4 || strings.HasPrefix(f[0], "#") || strings.Contains(f[3], "nofail") || strings.Contains(f[3], "noauto") {
 			continue
 		}
-		var path string
-		switch {
-		case strings.HasPrefix(f[0], "UUID="):
-			path = "/dev/disk/by-uuid/" + strings.Trim(strings.TrimPrefix(f[0], "UUID="), `"`)
-		case strings.HasPrefix(f[0], "PARTUUID="):
-			path = "/dev/disk/by-partuuid/" + strings.Trim(strings.TrimPrefix(f[0], "PARTUUID="), `"`)
-		case strings.HasPrefix(f[0], "LABEL="):
-			path = "/dev/disk/by-label/" + strings.Trim(strings.TrimPrefix(f[0], "LABEL="), `"`)
-		default:
-			continue
-		}
-		if !s.Exists(path) {
+		if path := diskPath(f[0]); path != "" && !s.Exists(path) {
 			missing = append(missing, fmt.Sprintf("%s (%s)", f[1], f[0]))
 		}
 	}
