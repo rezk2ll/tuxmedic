@@ -18,6 +18,7 @@ import (
 
 	"github.com/rezk2ll/tuxmedic/internal/checks"
 	"github.com/rezk2ll/tuxmedic/internal/doctor"
+	"github.com/rezk2ll/tuxmedic/internal/history"
 	"github.com/rezk2ll/tuxmedic/internal/report"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 	"github.com/rezk2ll/tuxmedic/internal/ui"
@@ -171,8 +172,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	interactive := (cmd == "" || cmd == "ask") && !*plain && !*asJSON && isTTY(os.Stdin) && isTTY(os.Stdout) && term != "dumb"
 
+	histPath := history.Path(os.Getenv)
+	prev, hadPrev := history.Load(histPath)
+	since := func(rs []doctor.Report) string {
+		line := ""
+		if hadPrev {
+			line = history.Compare(prev, rs, time.Now())
+		}
+		_ = history.Save(histPath, rs, time.Now())
+		return line
+	}
+
 	if interactive {
-		m := ui.New(s, h, selected, ui.Options{Version: versionString(), ASCII: *ascii})
+		m := ui.New(s, h, selected, ui.Options{Version: versionString(), ASCII: *ascii, Since: since})
 		if _, err := tea.NewProgram(m, tea.WithContext(ctx)).Run(); err != nil && !errors.Is(err, tea.ErrProgramKilled) {
 			fmt.Fprintln(stderr, "tuxmedic:", err)
 			return 1
@@ -199,6 +211,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			g = report.ASCII
 		}
 		report.Plain(stdout, h, results, g, *verbose)
+	}
+	if line := since(results); line != "" && cmd != "report" && !*asJSON {
+		fmt.Fprintln(stdout, "\n"+line)
 	}
 	if fail, _, _ := report.Counts(results); fail > 0 {
 		return 1

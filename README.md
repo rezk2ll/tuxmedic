@@ -86,6 +86,8 @@ The packages and the install script add `man tuxmedic` and tab completion for ba
 
 tuxmedic only reads. It changes nothing unless you pick a fix and press Enter, and then it runs the command it showed you in your terminal. It sends nothing anywhere. The only network traffic is a connection test to 1.1.1.1 and 9.9.9.9 and a DNS lookup of debian.org and kernel.org.
 
+To tell you what changed since last time, tuxmedic keeps one small file, `~/.local/state/tuxmedic/last.json`, with the name and result of each check and nothing else. Delete it whenever you like.
+
 `tuxmedic report` removes your host name, user name, home folder, MAC and IP addresses, emails, UUIDs and device serial numbers, so you can post it publicly. Read it before posting anyway.
 
 ## Build from source

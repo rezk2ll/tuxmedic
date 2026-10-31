@@ -181,6 +181,27 @@ func TestFixIsVerified(t *testing.T) {
 	}
 }
 
+func TestOverviewSaysWhatChangedSinceLastTime(t *testing.T) {
+	h := &doctor.Host{Distro: "Arch Linux"}
+	calls := 0
+	m := New(&sys.Fake{}, h, fakeChecks(), Options{Since: func(rs []doctor.Report) string {
+		calls++
+		return fmt.Sprintf("Since last time (2 days ago): fixed: Sound (%d checks).", len(rs))
+	}})
+	m.Init()
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	for _, c := range m.checks {
+		m.Update(reportMsg{doctor.RunOne(context.Background(), c, &sys.Fake{}, h)})
+	}
+	m.Update(reportMsg{doctor.RunOne(context.Background(), m.checks[0], &sys.Fake{}, h)})
+	if calls != 1 {
+		t.Errorf("Since called %d times, want once", calls)
+	}
+	if out := m.View().Content; !strings.Contains(out, "Since last time (2 days ago): fixed: Sound (7 checks).") {
+		t.Errorf("overview lacks the line:\n%s", out)
+	}
+}
+
 func TestWatchInTheInteractiveScreen(t *testing.T) {
 	m := newTestModel(t, false)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

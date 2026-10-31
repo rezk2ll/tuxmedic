@@ -42,6 +42,16 @@ func (s Status) String() string {
 
 func (s Status) MarshalText() ([]byte, error) { return []byte(s.String()), nil }
 
+func (s *Status) UnmarshalText(b []byte) error {
+	for st := OK; st <= Fail; st++ {
+		if st.String() == string(b) {
+			*s = st
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown status %q", b)
+}
+
 type Fix struct {
 	Title     string `json:"title"`
 	Command   string `json:"command,omitempty"`

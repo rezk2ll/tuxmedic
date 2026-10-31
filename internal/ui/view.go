@@ -350,7 +350,11 @@ func (m *Model) renderOverview(width int) (string, []action) {
 			st = doctor.Warn
 		}
 		b.WriteString(t.glyph(st) + " " + lipgloss.NewStyle().Bold(true).Foreground(t.color(st)).Render(report.Summary(rs)) + "\n")
-		b.WriteString(t.subtle.Render(wrap(fmt.Sprintf("Checked %d areas of %s in %s.", len(rs), m.host.Distro, fmtDuration(m.elapsed)), width)) + "\n\n")
+		b.WriteString(t.subtle.Render(wrap(fmt.Sprintf("Checked %d areas of %s in %s.", len(rs), m.host.Distro, fmtDuration(m.elapsed)), width)) + "\n")
+		if m.since != "" {
+			b.WriteString(t.bold.Render(wrap(m.since, width)) + "\n")
+		}
+		b.WriteString("\n")
 	}
 
 	var acts []action

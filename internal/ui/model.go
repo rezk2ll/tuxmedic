@@ -26,6 +26,9 @@ type Options struct {
 	ASCII   bool
 	// Only, when set, limits the session to these check IDs.
 	Only []string
+	// Since, when set, is called once the first run finishes and returns
+	// what changed since the previous session, or "".
+	Since func([]doctor.Report) string
 }
 
 var categoryOrder = []string{"Stability", "Network", "Devices", "Power", "Storage", "Performance", "System"}
@@ -106,6 +109,9 @@ type Model struct {
 	watching             bool
 	watchStart, watchEnd time.Time
 	watchGen             int
+
+	since     string
+	sinceDone bool
 }
 
 // action is something the user can trigger with a number key in the detail
@@ -208,6 +214,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.running, msg.r.CheckID)
 		if !m.busy() && !m.started.IsZero() {
 			m.elapsed = time.Since(m.started)
+			if !m.sinceDone && m.opts.Since != nil {
+				m.sinceDone = true
+				m.since = m.opts.Since(m.reportsList())
+			}
 		}
 		m.refreshDetail()
 		if before, ok := m.verifying[msg.r.CheckID]; ok {
