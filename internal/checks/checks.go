@@ -10,7 +10,7 @@ import (
 func All() []doctor.Check {
 	cs := []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Video, Games,
-		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Defaults, Keyring, Permissions, Locale, Clock,
+		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, VMs, Defaults, Keyring, Permissions, Locale, Clock,
 	}
 	for i := range cs {
 		cs[i].Keywords = strings.Fields(keywords[cs[i].ID])
@@ -57,6 +57,8 @@ var keywords = map[string]string{
 	"boot": "boot booting startup start starting slow login services service failed",
 	"apps": "flatpak snap screenshare screensharing share sharing portal wayland obs dialog open save sandbox " +
 		"screenshot vscode editor watch watching inotify dropbox syncthing syncing",
+	"vms": "vm vms virtual machine machines virtualbox vbox kvm qemu libvirt virt-manager boxes vmware " +
+		"vt-x vtx amd-v svm virtualization virtualisation bios",
 	"permissions": "permission permissions denied group groups docker sudo root arduino serial dialout owner " +
 		"ownership loop login password wrong incorrect locked lockout faillock",
 	"keyring": "keyring keyrings kwallet wallet unlock password passwords asks prompt seahorse autologin " +

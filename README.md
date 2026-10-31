@@ -15,7 +15,7 @@ Find out what's wrong with your Linux computer, and how to fix it.
 
 The laptop froze last night, the Wi-Fi keeps dropping, the battery is stuck at 80%, there's no sound over HDMI. Linux logs the cause of most of these somewhere, but finding it means knowing which of a dozen tools to ask and how to read what they say.
 
-tuxmedic asks them for you. It runs 28 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
+tuxmedic asks them for you. It runs 29 checks, usually in under a second, and tells you what it found in plain words, with the exact command to fix it on your distro.
 
 ## What it checks
 
@@ -37,6 +37,7 @@ Each check answers a question people actually ask:
 - Drivers & graphics: is some hardware missing a driver? NVIDIA with Secure Boot, Broadcom Wi-Fi, missing firmware.
 - Video playback: why do videos stutter and the fans spin up? No VA-API driver for your Intel, AMD or NVIDIA graphics, so the processor decodes every frame, and the H.264 and HEVC codecs Fedora and openSUSE leave out.
 - Games & Steam: why won't my games start? No Vulkan driver for Proton, the 32-bit driver Steam needs, Flatpak Steam without the controller rules.
+- Virtual machines: why won't they start? Virtualization switched off in the firmware, and VirtualBox refusing to run while KVM holds the processor (VERR_VMX_IN_VMX_ROOT_MODE).
 - Recent changes: it worked last week, what changed? Reads the update history (apt, pacman, rpm) and names the kernel, graphics, firmware, sound or desktop update most likely behind a new problem, with the way back.
 - Also: sleep and wake (including a lid that is set to do nothing), memory and swap, temperatures and fans, a processor held far below its top speed by a setting or a weak charger, pending updates and stuck package managers, apt sources that stopped downloading (old PPAs, expired keys), Arch systems left so long that the next update fails on signatures, slow startup and failed services, the clock, languages that were never installed ("Setting locale failed"), emoji drawn as boxes, links, folders and PDFs whose default app was uninstalled, keyring password prompts caused by automatic login, Bluetooth (including chips whose firmware didn't load), groups that only work after you log out, an account locked for a few minutes after wrong passwords (so the right one is refused too), a renamed computer that slows down sudo ("unable to resolve host"), and files in your home folder left owned by root.
 
