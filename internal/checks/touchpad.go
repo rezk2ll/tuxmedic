@@ -51,16 +51,27 @@ func inputEvent(s sys.System, name string) string {
 	return ""
 }
 
-// kdeTouchpadOff asks KWin whether it ignores the touchpad. KWin only owns
-// the input devices in a Wayland session.
-func kdeTouchpadOff(ctx context.Context, s sys.System, h *doctor.Host, pad string) []doctor.Finding {
+// kdeTouchpad asks KWin whether it ignores the touchpad or its taps. KWin
+// only owns the input devices in a Wayland session.
+func kdeTouchpad(ctx context.Context, s sys.System, h *doctor.Host, pad string) []doctor.Finding {
 	ev := inputEvent(s, pad)
 	if h.Session != "wayland" || !strings.Contains(strings.ToLower(h.Desktop), "kde") || ev == "" || !s.Has("busctl") {
 		return nil
 	}
 	path := "/org/kde/KWin/InputDevice/" + ev
-	out, err := s.Run(ctx, "busctl", "--user", "get-property", "org.kde.KWin", path, "org.kde.KWin.InputDevice", "enabled")
-	if err != nil || strings.TrimSpace(string(out)) != "b false" {
+	prop := func(name string) string {
+		out, _ := s.Run(ctx, "busctl", "--user", "get-property", "org.kde.KWin", path, "org.kde.KWin.InputDevice", name)
+		return strings.TrimSpace(string(out))
+	}
+	if prop("enabled") != "b false" {
+		if prop("tapToClick") == "b false" {
+			return []doctor.Finding{{
+				Status:  doctor.Info,
+				Title:   "Tapping the touchpad doesn't click: tap to click is off",
+				Explain: "The touchpad works, but only pressing it down clicks. Tapping it lightly clicks too once tap to click is on.",
+				Fixes:   []doctor.Fix{{Title: "Turn on Tap-to-click in System Settings, under Mouse & Touchpad, Touchpad"}},
+			}}
+		}
 		return nil
 	}
 	return []doctor.Finding{{
@@ -105,7 +116,7 @@ func runTouchpad(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Fin
 		}}
 	}
 
-	if fs := kdeTouchpadOff(ctx, s, h, pad); len(fs) > 0 {
+	if fs := kdeTouchpad(ctx, s, h, pad); len(fs) > 0 {
 		return fs
 	}
 	if s.Has("gsettings") && strings.Contains(strings.ToLower(h.Desktop), "gnome") {
