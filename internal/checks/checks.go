@@ -10,7 +10,7 @@ import (
 func All() []doctor.Check {
 	cs := []doctor.Check{
 		Crash, Network, Sound, Camera, Display, Keyboard, Touchpad, Fingerprint, Printer, Drives, Battery, Disk, Memory, Thermal, Video, Games,
-		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Defaults, Permissions, Locale, Clock,
+		Drivers, Sleep, Bluetooth, Updates, Changes, Boot, Apps, Defaults, Keyring, Permissions, Locale, Clock,
 	}
 	for i := range cs {
 		cs[i].Keywords = strings.Fields(keywords[cs[i].ID])
@@ -59,6 +59,8 @@ var keywords = map[string]string{
 		"screenshot vscode editor watch watching inotify dropbox syncthing syncing",
 	"permissions": "permission permissions denied group groups docker sudo root arduino serial dialout owner " +
 		"ownership loop login",
+	"keyring": "keyring keyrings kwallet wallet unlock password passwords asks prompt seahorse autologin " +
+		"automatic login",
 	"defaults": "default app apps browser link links click clicking open opens opening pdf folder folders " +
 		"wrong association xdg",
 	"locale": "locale language languages lang utf8 utf-8 unicode accents accented characters letters question marks " +
