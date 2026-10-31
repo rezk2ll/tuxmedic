@@ -44,10 +44,54 @@ func runPermissions(ctx context.Context, s sys.System, h *doctor.Host) []doctor.
 	var fs []doctor.Finding
 	fs = append(fs, pendingGroups(s, h)...)
 	fs = append(fs, rootOwnedHome(ctx, s, h)...)
+	fs = append(fs, ownHostname(ctx, s)...)
 	if len(fs) == 0 {
 		fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Your group memberships are active and your home folder belongs to you"})
 	}
 	return fs
+}
+
+// ownHostname catches a computer that can't look up its own name, usually
+// after a rename that missed /etc/hosts. sudo then waits for DNS on every
+// run and prints "unable to resolve host". glibc's myhostname and resolve
+// modules answer it without /etc/hosts, so they count.
+func ownHostname(ctx context.Context, s sys.System) []doctor.Finding {
+	name := readTrim(s, "/proc/sys/kernel/hostname")
+	if name == "" || name == "localhost" {
+		return nil
+	}
+	for _, l := range strings.Split(readTrim(s, "/etc/hosts"), "\n") {
+		l, _, _ = strings.Cut(l, "#")
+		f := strings.Fields(l)
+		for _, n := range f[min(1, len(f)):] {
+			if strings.EqualFold(n, name) || strings.EqualFold(strings.Split(n, ".")[0], name) {
+				return nil
+			}
+		}
+	}
+	for _, l := range strings.Split(readTrim(s, "/etc/nsswitch.conf"), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(l), "hosts:"); ok {
+			for _, m := range strings.Fields(rest) {
+				if m == "myhostname" || m == "resolve" {
+					return nil
+				}
+			}
+		}
+	}
+	if s.Lookup(ctx, name) == nil {
+		return nil
+	}
+	return []doctor.Finding{{
+		Status: doctor.Warn,
+		Title:  "This computer can't find its own name (" + name + "), so sudo is slow",
+		Explain: "The name isn't in /etc/hosts, often after renaming the computer. sudo and some apps wait for the network to look it up, " +
+			"then print \"unable to resolve host\".",
+		Fixes: []doctor.Fix{{
+			Title:     "Add the name to /etc/hosts",
+			Command:   "echo \"127.0.1.1 " + name + "\" | sudo tee -a /etc/hosts",
+			NeedsRoot: true,
+		}},
+	}}
 }
 
 // pendingGroups finds groups the user was added to after logging in. Linux only

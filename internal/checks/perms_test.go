@@ -68,6 +68,34 @@ func TestPermissions(t *testing.T) {
 		}), permsHost())
 		expect(t, r, doctor.Info, "1 item in your home folder is owned")
 	})
+	hostname := func(hosts, nss string, resolvable bool) *sys.Fake {
+		f := permsFake("4 20 27 998 1000", nil)
+		f.Files["/proc/sys/kernel/hostname"] = "studio-pc\n"
+		f.Files["/etc/hosts"] = hosts
+		f.Files["/etc/nsswitch.conf"] = "passwd: files\n" + nss
+		f.Resolvable = map[string]bool{"studio-pc": resolvable}
+		return f
+	}
+	t.Run("renamed, /etc/hosts still has the old name", func(t *testing.T) {
+		f := hostname("127.0.0.1 localhost\n127.0.1.1 old-laptop # renamed\n", "hosts: files dns\n", false)
+		r := run(t, Permissions, f, permsHost())
+		expect(t, r, doctor.Warn, "can't find its own name (studio-pc), so sudo is slow")
+		if c := r.Findings[0].Fixes[0].Command; c != `echo "127.0.1.1 studio-pc" | sudo tee -a /etc/hosts` {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("name in /etc/hosts with a domain", func(t *testing.T) {
+		f := hostname("127.0.1.1 studio-pc.lan\n", "hosts: files dns\n", false)
+		expect(t, run(t, Permissions, f, permsHost()), doctor.OK, "group memberships are active")
+	})
+	t.Run("myhostname answers it", func(t *testing.T) {
+		f := hostname("127.0.0.1 localhost\n", "hosts: mymachines resolve [!UNAVAIL=return] files myhostname dns\n", false)
+		expect(t, run(t, Permissions, f, permsHost()), doctor.OK, "group memberships are active")
+	})
+	t.Run("the local DNS server knows it", func(t *testing.T) {
+		f := hostname("127.0.0.1 localhost\n", "hosts: files dns\n", true)
+		expect(t, run(t, Permissions, f, permsHost()), doctor.OK, "group memberships are active")
+	})
 	t.Run("as root", func(t *testing.T) {
 		f := permsFake("0", nil)
 		f.Root = true
