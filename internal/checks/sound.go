@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,31 @@ func (s paSink) volume() int {
 		v = max(v, n)
 	}
 	return v
+}
+
+// noSessionManager tells "no hardware" apart from PipeWire running without
+// WirePlumber, which is what hands it the sound cards: then the kernel has
+// cards but PipeWire shows only Dummy Output.
+func noSessionManager(ctx context.Context, s sys.System, cards []byte, noCards bool) (doctor.Finding, bool) {
+	if noCards || len(cards) == 0 || !s.Has("pipewire") {
+		return doctor.Finding{}, false
+	}
+	out, _ := s.Run(ctx, "systemctl", "--user", "is-active", "wireplumber.service", "pipewire-media-session.service")
+	states := strings.Fields(string(out))
+	if len(states) != 2 || slices.Contains(states, "active") || slices.Contains(states, "activating") {
+		return doctor.Finding{}, false
+	}
+	return doctor.Finding{
+		Status: doctor.Fail,
+		Title:  "Only \"Dummy Output\": PipeWire is running without WirePlumber",
+		Explain: "Linux found your sound card, but WirePlumber, the helper that connects PipeWire to it, isn't running. " +
+			"So apps see no speakers or headphones at all.",
+		Fixes: []doctor.Fix{
+			{Title: "Start WirePlumber now and at every login", Command: "systemctl --user enable --now wireplumber.service"},
+			{Title: "If it stops again, see why", Command: "journalctl --user -b -u wireplumber --no-pager | tail -20"},
+		},
+		Evidence: []string{"wireplumber.service: " + states[0], firstLineOf(string(cards))},
+	}, true
 }
 
 func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
@@ -104,6 +130,9 @@ func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		}
 	}
 	if len(real) == 0 {
+		if f, ok := noSessionManager(ctx, s, cards, noCards); ok {
+			return []doctor.Finding{f}
+		}
 		return []doctor.Finding{noSoundCard(h)}
 	}
 
