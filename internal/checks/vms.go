@@ -11,28 +11,35 @@ import (
 
 var VMs = doctor.Check{
 	ID:       "vms",
-	Name:     "Virtual machines",
+	Name:     "Virtual machines & containers",
 	Category: "System",
-	Question: "Why won't my virtual machines start?",
+	Question: "Why won't my virtual machines or containers start?",
 	Run:      runVMs,
 }
 
 var vmTools = []string{"VBoxManage", "virt-manager", "gnome-boxes", "qemu-system-x86_64", "virsh", "vmware"}
 
 func runVMs(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
-	if h.Virtual != "" || h.Container {
-		return []doctor.Finding{{Status: doctor.Skipped, Title: "This is a virtual machine itself"}}
+	if h.Container {
+		return []doctor.Finding{{Status: doctor.Skipped, Title: "This is a container itself"}}
 	}
+	fs := containers(ctx, s, h)
 	var tools []string
 	for _, t := range vmTools {
 		if s.Has(t) {
 			tools = append(tools, t)
 		}
 	}
-	if len(tools) == 0 {
-		return []doctor.Finding{{Status: doctor.Skipped, Title: "No virtual machine app is installed"}}
+	if len(tools) == 0 || h.Virtual != "" {
+		switch {
+		case len(fs) > 0:
+		case s.Has("docker") || s.Has("podman"):
+			fs = append(fs, doctor.Finding{Status: doctor.OK, Title: "Containers are set up to run"})
+		default:
+			fs = append(fs, doctor.Finding{Status: doctor.Skipped, Title: "No virtual machine or container app is installed"})
+		}
+		return fs
 	}
-	var fs []doctor.Finding
 	flag := hasVirtFlag(s)
 	if flag == "" || flag == "unknown" && !s.Exists("/dev/kvm") {
 		fs = append(fs, doctor.Finding{
@@ -77,6 +84,50 @@ func hasVirtFlag(s sys.System) string {
 		return ""
 	}
 	return "unknown"
+}
+
+// containers covers the two ways a fresh Docker or Podman install fails
+// for a desktop user before the first container even starts.
+func containers(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Finding {
+	var fs []doctor.Finding
+	// With Podman installed, "docker" is often its shim; Docker Desktop
+	// runs its own VM. Neither uses the system service.
+	if s.Has("docker") && !s.Has("podman") && !s.Exists("/opt/docker-desktop") && h.Systemd && s.Has("systemctl") &&
+		!s.Exists("/run/docker.sock") && !s.Exists("/var/run/docker.sock") {
+		out, _ := s.Run(ctx, "systemctl", "is-active", "docker.service", "docker.socket")
+		if st := strings.Fields(string(out)); len(st) == 2 && st[0] != "active" && st[1] != "active" {
+			fs = append(fs, doctor.Finding{
+				Status:  doctor.Warn,
+				Title:   "Docker is installed but its service isn't running",
+				Explain: "Every docker command then fails with \"Cannot connect to the Docker daemon\". Some distros install Docker without starting it.",
+				Fixes:   []doctor.Fix{{Title: "Start Docker now and at every startup", Command: "sudo systemctl enable --now docker.socket", NeedsRoot: true}},
+			})
+		}
+	}
+	if s.Has("podman") && h.User != "" && h.User != "root" && !strings.Contains(readTrim(s, "/etc/nsswitch.conf"), "subid:") {
+		listed := func(f string) bool {
+			for _, l := range strings.Split(readTrim(s, f), "\n") {
+				if name, _, _ := strings.Cut(l, ":"); name == h.User {
+					return true
+				}
+			}
+			return false
+		}
+		if !listed("/etc/subuid") || !listed("/etc/subgid") {
+			fs = append(fs, doctor.Finding{
+				Status: doctor.Warn,
+				Title:  "Podman can't run containers as you: your account has no ID range",
+				Explain: "Containers without root need a range of user IDs set aside for your account in /etc/subuid and /etc/subgid. " +
+					"Accounts created before Podman was installed often have none, and Podman stops with \"cannot find UID/GID mappings\".",
+				Fixes: []doctor.Fix{{
+					Title:     "Give your account an ID range, then reset Podman",
+					Command:   "sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 " + h.User + " && podman system migrate",
+					NeedsRoot: true,
+				}},
+			})
+		}
+	}
+	return fs
 }
 
 var libvirtUnits = []string{"libvirtd.service", "libvirtd.socket", "virtqemud.service", "virtqemud.socket"}

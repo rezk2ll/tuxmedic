@@ -25,7 +25,7 @@ func TestVMs(t *testing.T) {
 	}
 
 	t.Run("no VM app", func(t *testing.T) {
-		expect(t, run(t, VMs, fake("svm", nil), h), doctor.Skipped, "No virtual machine app")
+		expect(t, run(t, VMs, fake("svm", nil), h), doctor.Skipped, "No virtual machine or container app")
 	})
 	t.Run("switched off in firmware", func(t *testing.T) {
 		expect(t, run(t, VMs, fake("", []string{"virt-manager"}), h), doctor.Fail, "Hardware virtualization is switched off")
@@ -70,6 +70,30 @@ func TestVMs(t *testing.T) {
 		expect(t, run(t, VMs, f, h), doctor.OK, "AMD-V")
 	})
 	t.Run("inside a VM", func(t *testing.T) {
-		expect(t, run(t, VMs, fake("", []string{"virsh"}), &doctor.Host{Virtual: "kvm"}), doctor.Skipped, "virtual machine itself")
+		expect(t, run(t, VMs, fake("", []string{"virsh"}), &doctor.Host{Virtual: "kvm"}), doctor.Skipped, "No virtual machine or container app")
+	})
+
+	podman := &doctor.Host{ID: "fedora", PackageMgr: "dnf", Systemd: true, User: "sam"}
+	t.Run("podman without an ID range", func(t *testing.T) {
+		r := run(t, VMs, fake("vmx", []string{"podman"}, "/etc/subuid", "alex:100000:65536\n", "/etc/subgid", "alex:100000:65536\n"), podman)
+		expect(t, r, doctor.Warn, "Podman can't run containers as you")
+		if c := r.Findings[0].Fixes[0].Command; !strings.HasSuffix(c, "100000-165535 sam && podman system migrate") {
+			t.Errorf("fix = %q", c)
+		}
+	})
+	t.Run("podman ready", func(t *testing.T) {
+		r := run(t, VMs, fake("vmx", []string{"podman"}, "/etc/subuid", "sam:100000:65536\n", "/etc/subgid", "sam:100000:65536\n"), podman)
+		expect(t, r, doctor.OK, "Containers are set up to run")
+	})
+	dq := "systemctl is-active docker.service docker.socket"
+	t.Run("docker service off", func(t *testing.T) {
+		f := fake("vmx", []string{"docker", "systemctl"})
+		f.Commands[dq] = "inactive\ninactive\n"
+		expect(t, run(t, VMs, f, podman), doctor.Warn, "Docker is installed but its service isn't running")
+	})
+	t.Run("docker socket listening", func(t *testing.T) {
+		f := fake("vmx", []string{"docker", "systemctl"})
+		f.Commands[dq] = "inactive\nactive\n"
+		expect(t, run(t, VMs, f, podman), doctor.OK, "Containers are set up to run")
 	})
 }

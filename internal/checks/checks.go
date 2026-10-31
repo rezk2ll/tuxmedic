@@ -58,7 +58,7 @@ var keywords = map[string]string{
 	"apps": "flatpak snap screenshare screensharing share sharing portal wayland obs dialog open save sandbox " +
 		"screenshot vscode editor watch watching inotify dropbox syncthing syncing",
 	"vms": "vm vms virtual machine machines virtualbox vbox kvm qemu libvirt virt-manager boxes vmware " +
-		"vt-x vtx amd-v svm virtualization virtualisation bios",
+		"vt-x vtx amd-v svm virtualization virtualisation bios docker podman container containers daemon subuid",
 	"permissions": "permission permissions denied group groups docker sudo root arduino serial dialout owner " +
 		"ownership loop login password wrong incorrect locked lockout faillock",
 	"keyring": "keyring keyrings kwallet wallet unlock password passwords asks prompt seahorse autologin " +
