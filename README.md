@@ -56,6 +56,7 @@ go install github.com/rezk2ll/tuxmedic/cmd/tuxmedic@latest
 ```sh
 tuxmedic             # the interactive screen
 tuxmedic ask "zoom can't hear me"   # only the checks your problem is about
+tuxmedic watch       # record Wi-Fi drops and overheating while they happen
 tuxmedic check       # print the results, for scripts and pipes
 tuxmedic check sound battery
 tuxmedic report      # a Markdown report to paste on a forum
@@ -63,6 +64,8 @@ tuxmedic check --json
 ```
 
 In the interactive screen, press a number to open a check, then a number to run or copy one of its fixes. `e` shows the log lines a finding is based on, `/` lets you describe the problem in your own words and keeps the checks it is about, `ctrl+p` lists every command, and `?` shows all the keys. The mouse works too.
+
+`tuxmedic watch` is for problems that come and go. Leave it running until the Wi-Fi drops again, then press Ctrl+C. It tells apart a weak signal, this computer dropping a good connection, and the router or provider losing the internet while the Wi-Fi stays up. `--for 30m` stops it on its own.
 
 `tuxmedic check` exits with 1 when it finds a problem, so it works in scripts.
 

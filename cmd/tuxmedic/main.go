@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/rezk2ll/tuxmedic/internal/report"
 	"github.com/rezk2ll/tuxmedic/internal/sys"
 	"github.com/rezk2ll/tuxmedic/internal/ui"
+	"github.com/rezk2ll/tuxmedic/internal/watch"
 )
 
 // Set by the release build.
@@ -31,6 +33,7 @@ Usage:
   tuxmedic                  open the interactive screen
   tuxmedic ask QUESTION     check what your question is about, e.g. tuxmedic ask "no sound in zoom"
   tuxmedic check [CHECK…]   print the results (all checks, or the ones named)
+  tuxmedic watch            record drops and overheating as they happen, for problems that come and go
   tuxmedic report           print a report to share on a forum, personal details removed
   tuxmedic list             list the checks
   tuxmedic version          print the version
@@ -41,6 +44,7 @@ Options:
   --verbose    include passing checks and the log lines behind each finding
   --ascii      use plain ASCII symbols, for consoles without Unicode
   --no-redact  keep names and addresses in --json output
+  --for 30m    stop watching after this long (with watch)
 
 Exit status: 0 when nothing is broken, 1 when a problem was found, 2 on bad usage.
 `
@@ -59,13 +63,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 	ascii := fs.Bool("ascii", false, "")
 	noRedact := fs.Bool("no-redact", false, "")
 	showVersion := fs.Bool("version", false, "")
+	watchFor := fs.Duration("for", 0, "")
 
 	// Accept flags after the subcommand too: "tuxmedic check --json".
 	var flags, rest []string
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case (a == "--for" || a == "-for") && i+1 < len(args):
+			flags = append(flags, a, args[i+1])
+			i++
+		case strings.HasPrefix(a, "-"):
 			flags = append(flags, a)
-		} else {
+		default:
 			rest = append(rest, a)
 		}
 	}
@@ -95,6 +105,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "list":
 		for _, c := range all {
 			fmt.Fprintf(stdout, "%-10s %s\n", c.ID, c.Question)
+		}
+		return 0
+	case "watch":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		events := watch.Run(ctx, sys.Host{}, stdout, 3*time.Second, *watchFor, isTTY(os.Stdout) && os.Getenv("TERM") != "dumb")
+		if len(events) > 0 {
+			return 1
 		}
 		return 0
 	case "", "check", "report", "ask":
