@@ -48,4 +48,19 @@ func TestSound(t *testing.T) {
 		r.Findings[1].Fixes[0].Command != "pactl set-sink-input-volume 73 100%" {
 		t.Errorf("findings = %+v", r.Findings)
 	}
+
+	const dockSink = "alsa_output.usb-Acme_Dock_Audio-00.analog-stereo-headset"
+	dock := fake(speakers[:len(speakers)-1]+`,{"name":"`+dockSink+`","description":"Acme Dock Headset","mute":false,`+
+		`"volume":{"front-left":{"value_percent":"50%"}},"ports":[]}]`, "active\ninactive\n")
+	dock.Commands["pactl get-default-sink"] = "alsa_output.pci-0000_00_1f.3.analog-stereo\n"
+	r = run(t, Sound, dock, h)
+	expect(t, r, doctor.Info, "Plugging headphones into Acme Dock Headset doesn't switch the sound to them")
+	if c := r.Findings[0].Fixes[0].Command; c != "pactl set-default-sink "+dockSink {
+		t.Errorf("fix = %q", c)
+	}
+
+	dock.Commands["pactl get-default-sink"] = dockSink + "\n"
+	if r = run(t, Sound, dock, h); len(r.Findings) != 1 {
+		t.Errorf("dock is the default, findings = %+v", r.Findings)
+	}
 }
