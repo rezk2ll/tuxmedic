@@ -189,6 +189,7 @@ func runSound(ctx context.Context, s sys.System, h *doctor.Host) []doctor.Findin
 		})
 	}
 
+	fs = append(fs, undetectedJacks(def, real)...)
 	fs = append(fs, monitorAudio(ctx, s, real)...)
 	fs = append(fs, bluetoothCallMode(ctx, s)...)
 	return fs
@@ -311,6 +312,31 @@ func configuredDefault(ctx context.Context, s sys.System) string {
 		return m[1]
 	}
 	return ""
+}
+
+// undetectedJacks catches USB audio, typically a dock's headphone jack, whose
+// profile set defines no ports: without a port there is no plug detection, so
+// plugging headphones in never moves the sound off the default output.
+// Pro-audio sinks have no ports by design and are left out.
+func undetectedJacks(def paSink, sinks []paSink) []doctor.Finding {
+	var fs []doctor.Finding
+	for _, k := range sinks {
+		if k.Name == def.Name || len(k.Ports) > 0 || !strings.Contains(k.Name, ".usb-") || strings.Contains(k.Name, "pro-output") {
+			continue
+		}
+		name := friendlySink(k)
+		fs = append(fs, doctor.Finding{
+			Status: doctor.Info,
+			Title:  "Plugging headphones into " + name + " doesn't switch the sound to them",
+			Explain: fmt.Sprintf("This device can't tell when something is plugged into its jack, so sound keeps playing through %s. "+
+				"Choose it once and the sound service remembers it for the next time it's connected.", friendlySink(def)),
+			Fixes: []doctor.Fix{
+				{Title: "Play sound through " + name, Command: "pactl set-default-sink " + k.Name},
+				{Title: "Or pick it, for output and input, in your sound settings"},
+			},
+		})
+	}
+	return fs
 }
 
 func monitorAudio(ctx context.Context, s sys.System, sinks []paSink) []doctor.Finding {
